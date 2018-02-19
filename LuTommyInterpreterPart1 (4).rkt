@@ -133,17 +133,31 @@ Functions that should return values
     (cond
       ((null? lis) #f)
       ((null? (operator lis)) #f)
-      ((null? (firstarg lis) 
+      ((null? (execcond lis)) #f)
+      ((null? (body lis)) #f)
+      ((null? (elsebody lis)) #f)
+      ((null? (cdr (cdddr lis))) #t)
+      (else #f))))
+
+(define isIf
+  (lambda (lis)
+    (cond
+      ((null? lis) #f)
+      ((null? (operator lis)) #f)
+      ((null? (execcond lis)) #f)
+      ((null? (body lis)) #f)
+      ((null? (elsebody lis)) #t)
+      (else #f))))
+      
 
 ;takes an expression (list like '([if, while] (...) (...) (...)) and returns the state determined by the logic
 (define m_state_ifwhile
   (lambda (expr s)
     (cond
       ((eq? (operator expr) 'while) (if (m_bool (execcond expr) s) (m_state_ifwhile expr (m_state (body expr) s)) s))
-      ((isIfElse expr) (if (m_bool (execcond expr) s) (m_state (body expr) s) (m_state (elsebody expr) s)))    ; todo the and clause
+      ((isIfElse expr) (if (m_bool (execcond expr) s) (m_state (body expr) s) (m_state (elsebody expr) s)))    ; todo the and clause         todo also change the "variable-like" use of (define **** '())
       ((isIf expr) ; do it more with just the if body
-      ((isNullBody expr)
-      (else s))))))
+      (else s)))))); return 
 
 #|
 
