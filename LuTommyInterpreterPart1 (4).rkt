@@ -46,7 +46,10 @@ Relevant abstractions are left below the functions that have them, otherwise gen
 ;Check the prefix from the parsetree standpoint to know what to apply to the statement
 (define stmttype caar)
 ;Check this particular expressions' prefix/operator
-(define prefix car)
+(define prefix (lambda (expr)
+                 (cond
+                   ((pair? expr) (car lis))
+                   (else expr))))
 
 ;List of arithmatic operators
 (define arithop '(+ - / * %))
@@ -72,7 +75,6 @@ m_state should return booleans or values to the interpret
   (lambda (parsedtree s)
     (cond
       ((null? parsedtree) s)
-      ;((list? (prefix parsedtree)) (m_state (remaining_lines parsedtree) (m_state (current_line parsedtree) s)))
       ((eq? (stmttype parsedtree) 'return) (m_return (car parsedtree) s))
       ((member? (stmttype parsedtree) declop) (m_state (cdr parsedtree) (s_declassign (car parsedtree) s)))
       ((member? (stmttype parsedtree) ifwhileop) (m_state (cdr parsedtree) (m_state_ifwhile (car parsedtree) s))))))
@@ -192,7 +194,7 @@ Functions that should return an updated state
     (cond
       ((not (s_isinstate? var s)) (error 'varnotfound))
       ((eq? var (currentvar s)) (cons (restofvars s) (list (restofvalues s))))
-      (else (cons (cons (currentvar s)) (car (s_remove var (cons (restofvars s)) (list (restofvalues s))))) (list (cons (restofvalues s)) (cadr (s_remove var (cons (restofvalues s)) (list (restofvalues s))))))))))
+      (else (cons (cons (currentvar s) (varsof (s_remove var (cons (restofvars s) (list (restofvalues s)))))) (list (cons (currentval s) (valsof (s_remove var (cons (restofvalues s) (list (restofvalues s))))))))))))
 
 ;find finds a value that is paired to a variable in state which is a (list list)
 ;1: state is empty 2: var list is empty 3: check first variable in var list, return value if it is the same 4: iterate through both lists of state and check again
