@@ -157,7 +157,7 @@ Functions that should return values
       ((eq? (operator expr) 'while) (if (m_bool (execcond expr) s) (m_state_ifwhile expr (m_state (body expr) s)) s))
       ((isIfElse expr) (if (m_bool (execcond expr) s) (m_state (body expr) s) (m_state (elsebody expr) s)))    ; todo the and clause         todo also change the "variable-like" use of (define **** '())
       ((isIf expr) ; do it more with just the if body
-      (else s)))))); return 
+      (else s))))); return 
 
 #|
 
@@ -191,8 +191,8 @@ Functions that should return an updated state
   (lambda (var s)
     (cond
       ((not (s_isinstate? var s)) (error 'varnotfound))
-      ((eq? var (caar s)) (cons (restofvars s)) (list (restofvalues s)))
-      (else (cons (cons (car (varsof s)) (car (s_remove var (cons (restofvars s)) (list (restofvalues s))))) (list (cons (restofvalues s)) (cadr (s_remove var (cons (restofvalues s)) (list (restofvalues s))))))))))
+      ((eq? var (currentvar s)) (cons (restofvars s) (list (restofvalues s))))
+      (else (cons (cons (currentvar s)) (car (s_remove var (cons (restofvars s)) (list (restofvalues s))))) (list (cons (restofvalues s)) (cadr (s_remove var (cons (restofvalues s)) (list (restofvalues s))))))))))
 
 ;find finds a value that is paired to a variable in state which is a (list list)
 ;1: state is empty 2: var list is empty 3: check first variable in var list, return value if it is the same 4: iterate through both lists of state and check again
