@@ -58,8 +58,10 @@ Relevant abstractions are left below the functions that have them, otherwise gen
 (define declop '(var =))
 ;List of boolean operators
 (define boolop '(== != >= <= > < || && !))
-;List of if and while operators
-(define ifwhileop '(if while))
+;List of while operators
+(define whileop '(while))
+;List of if operators
+(define ifop '(if))
 
 #|
 
@@ -74,10 +76,11 @@ m_state should return a state
       ((null? parsedtree) s)
       ((eq? (stmttype parsedtree) 'return) (m_return (car parsedtree) s return))
       ((eq? (stmttype parsedtree) 'begin) (m_state (cdr parsedtree) (removelayer (m_state (cdar parsedtree) (addlayer s) break continue return throw)) break continue return throw))
-      ;((eq? (stmttype parsedtree) 'continue) (m_state (cdr parsedtree) (removelayer (m_state (cdar parsedtree) (addlayer s) break continue return throw)) break continue return throw))
-      ;((eq? (stmttype parsedtree) 'break) (m_state (cdr parsedtree) (removelayer (m_state (cdar parsedtree) (addlayer s) break continue return throw)) break continue return throw))
+      ((eq? (stmttype parsedtree) 'continue) (continue s))
+      ((eq? (stmttype parsedtree) 'break) (break s))
       ((member? (stmttype parsedtree) declop) (m_state (cdr parsedtree) (s_declassign (car parsedtree) s) break continue return throw))
-      ((member? (stmttype parsedtree) ifwhileop) (m_state (cdr parsedtree) (removelayer (m_state_ifwhile (car parsedtree) (addlayer s) break continue return throw)) break continue return throw)))))
+      ((member? (stmttype parsedtree) whileop) (m_state (cdr parsedtree) (removelayer (call/cc (lambda (break) (m_state_while (car parsedtree) (addlayer s) break continue return throw)))) break continue return throw))
+      ((member? (stmttype parsedtree) ifop) (m_state (cdr parsedtree) (removelayer (m_state_if (car parsedtree) (addlayer s) break continue return throw)) break continue return throw)))))
 
 (define blockparsedtree cdar)
 
@@ -168,14 +171,17 @@ Functions that should return values
       
 
 ;takes an expression (list like '([if, while] (...) (...) (...)) and returns the state determined by the logic
-(define m_state_ifwhile
+(define m_state_while
   (lambda (expr s break continue return throw)
     (cond
-      ((eq? (operator expr) 'while) (if (m_bool (execcond expr) s) (m_state_ifwhile expr (m_state  (body expr) s break continue return throw) break continue return throw) s))
-      ((isIfElse expr) (if (m_bool (execcond expr) s) (m_state (body expr) s break continue return throw) (m_state (elsebody expr) s break continue return throw)))
-      ((isIf expr) (if (m_bool (execcond expr) s) (m_state (body expr) s break continue return throw) s))
-      (else s)))); return 
+      ((eq? (operator expr) 'while) (if (m_bool (execcond expr) s) (m_state_while expr (call/cc (lambda (continue) (m_state (body expr) s break continue return throw))) break continue return throw) s))
+      (else (break s))))); return 
 
+(define m_state_if
+  (lambda (expr s break continue return throw)
+    (cond
+      ((isIfElse expr) (if (m_bool (execcond expr) s) (m_state (body expr) s break continue return throw) (m_state (elsebody expr) s break continue return throw)))
+      ((isIf expr) (if (m_bool (execcond expr) s) (m_state (body expr) s break continue return throw) s)))))
 #|
 
 Functions that should return an updated state
