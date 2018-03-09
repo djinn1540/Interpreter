@@ -73,9 +73,11 @@ m_state should return a state
     (cond
       ((null? parsedtree) s)
       ((eq? (stmttype parsedtree) 'return) (m_return (car parsedtree) s return))
+      ((eq? (stmttype parsedtree) 'begin) (m_state (cdr parsedtree) (removelayer (m_state (cdar parsedtree) (addlayer s) break continue return throw)) break continue return throw))
+      ;((eq? (stmttype parsedtree) 'continue) (m_state (cdr parsedtree) (removelayer (m_state (cdar parsedtree) (addlayer s) break continue return throw)) break continue return throw))
+      ;((eq? (stmttype parsedtree) 'break) (m_state (cdr parsedtree) (removelayer (m_state (cdar parsedtree) (addlayer s) break continue return throw)) break continue return throw))
       ((member? (stmttype parsedtree) declop) (m_state (cdr parsedtree) (s_declassign (car parsedtree) s) break continue return throw))
-      ((member? (stmttype parsedtree) ifwhileop) (m_state (cdr parsedtree) (removelayer (m_state_ifwhile (car parsedtree) (addlayer s) break continue return throw)) break continue return throw))
-      ((eq? (stmttype parsedtree) 'begin) (m_state (cdr parsedtree) (removelayer (m_state (cdar parsedtree) (addlayer s) break continue return throw)) break continue return throw)))))
+      ((member? (stmttype parsedtree) ifwhileop) (m_state (cdr parsedtree) (removelayer (m_state_ifwhile (car parsedtree) (addlayer s) break continue return throw)) break continue return throw)))))
 
 (define blockparsedtree cdar)
 
@@ -229,6 +231,7 @@ Functions that should return an updated state
   (lambda (var s)
     (cond
       ((null? s) (error 'stateisempty))
+      ((not (s_isinstate? var s)) (error 'varnotinstate))
       ((and (null? (varsoflayer s)) (pair? (nextlayer s))) (s_find var (nextlayer s)))
       ((null? (varsoflayer s)) '())
       ((and (eq? (currentvar s) var) (null? (currentvalue s))) (error 'valueisuninitalized))
