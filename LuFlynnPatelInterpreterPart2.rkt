@@ -1,5 +1,6 @@
 ;Tommy Lu/Vishal Patel/Jamie Flynn
 ;3/8/2018
+;10:31PM passed test2-1
 
 ;Import Parser
 (require "simpleparser.scm")
