@@ -23,10 +23,10 @@ Relevant abstractions are left below the functions that have them, otherwise gen
 
 |#
   
-;Valuesof gets the value list from a state
-(define valuesof cadr)
+;valuesoflayer gets the value list from a state while maintaining later layers
+(define valuesoflayer cadr)
 ;Varsof gets the var list from a state
-(define varsof car)
+(define varsoflayer car)
 ;Gets the cdr of the variable list, the rest of the variables in a state
 (define restofvars cdar)
 ;Gets the cdr of the value list, the rest of the values in a state
@@ -73,7 +73,16 @@ m_state should return a state
       ((null? parsedtree) s)
       ((eq? (stmttype parsedtree) 'return) (m_return (car parsedtree) s return))
       ((member? (stmttype parsedtree) declop) (m_state (cdr parsedtree) (s_declassign (car parsedtree) s) break continue return throw))
-      ((member? (stmttype parsedtree) ifwhileop) (m_state (cdr parsedtree) (m_state_ifwhile (car parsedtree) s break continue return throw) break continue return throw)))))
+      ((member? (stmttype parsedtree) ifwhileop) (m_state (cdr parsedtree) (removelayer (m_state_ifwhile (car parsedtree) (addlayer s) break continue return throw)) break continue return throw))
+      ((eq? (stmttype parsedtree) 'begin) (m_state (cdr parsedtree) (removelayer (m_state (cdar parsedtree) (addlayer s) break continue return throw)) break continue return throw)))))
+
+(define blockparsedtree cdar)
+
+(define addlayer
+  (lambda (s)
+    (append '(()()) s)))
+
+(define removelayer cddr)
 
 
 ;Assigns 'return variable to a value/boolean in state and then returns the state
@@ -193,34 +202,40 @@ Functions that should return an updated state
 (define s_add
   (lambda (var val s)
     (cond
-      ((s_isinstate? var s) (s_add var val (s_remove var s)))
-      ((number? val) (cons (cons var (varsof s)) (list (cons val (valuesof s)))))
-      ((eq? #t val) (cons (cons var (varsof s)) (list (cons 'true (valuesof s)))))
-      ((eq? #f val) (cons (cons var (varsof s)) (list (cons 'false (valuesof s)))))
-      ((eq? 'true val) (cons (cons var (varsof s)) (list (cons 'true (valuesof s)))))
-      ((eq? 'false val) (cons (cons var (varsof s)) (list (cons 'false (valuesof s)))))
-      (else (cons (cons var (varsof s)) (list (cons (m_value val s) (valuesof s))))))))
+      ((s_isinstate? var s) (s_remove var val s))
+      ((number? val) (append (cons (cons var (varsoflayer s)) (list (cons val (valuesoflayer s)))) (nextlayer s)))
+      ((eq? #t val) (append (cons (cons var (varsoflayer s)) (list (cons 'true (valuesoflayer s)))) (nextlayer s)))
+      ((eq? #f val) (append (cons (cons var (varsoflayer s)) (list (cons 'false (valuesoflayer s)))) (nextlayer s)))
+      ((eq? 'true val) (append (cons (cons var (varsoflayer s)) (list (cons 'true (valuesoflayer s)))) (nextlayer s)))
+      ((eq? 'false val) (append (cons (cons var (varsoflayer s)) (list (cons 'false (valuesoflayer s)))) (nextlayer s)))
+      (else (append (cons (cons var (varsoflayer s)) (list (cons (m_value val s) (valuesoflayer s)))) (nextlayer s))))))
 
-;Removes variable and its associated value
+;Removes variable and its associated value then adds the var and new value associated with it to the earliest layer (most inner layer) it was found.
 (define s_remove
-  (lambda (var s)
+  (lambda (var val s)
     (cond
       ((not (s_isinstate? var s)) (error 'varnotfound))
-      ((eq? var (currentvar s)) (cons (restofvars s) (list (restofvalues s))))
-      (else (cons (cons (currentvar s) (varsof (s_remove var (cons (restofvars s) (list (restofvalues s)))))) (list (cons (currentvalue s) (valuesof (s_remove var (cons (restofvars s) (list (restofvalues s))))))))))))
+      ((not (member? var (varsoflayer s))) (append (cons (varsoflayer s) (list (valuesoflayer s))) (s_remove var val (nextlayer s))))
+      ((eq? var (currentvar s)) (cons (cons var (restofvars s)) (list (cons val (restofvalues s)))))
+      (else (cons (cons (currentvar s) (varsoflayer (s_remove var val (cons (restofvars s) (list (restofvalues s))))))
+                        (list (cons (currentvalue s) (valuesoflayer (s_remove var val (cons (restofvars s) (list (restofvalues s))))))))))))
 
 
 ;find finds a value that is paired to a variable in state which is a (list list)
-;1: state is empty 2: var list is empty 3: check if value is uninitalized 4: check first variable in var list, return value if it is the same 5: iterate through both lists of state and check again
+;1: state is empty 2: if this layer does not contain it and there is another layer, check the next one
+;3: var list is empty  4: check if value is uninitalized 5: check first variable in var list, return value if it is the same 5: iterate through both lists of state and check again
 (define s_find
   (lambda (var s)
     (cond
-      ((null? s) (error 'stateisnottwolists))
-      ((null? (varsof s)) '())
+      ((null? s) (error 'stateisempty))
+      ((and (null? (varsoflayer s)) (pair? (nextlayer s))) (s_find var (nextlayer s)))
+      ((null? (varsoflayer s)) '())
       ((and (eq? (currentvar s) var) (null? (currentvalue s))) (error 'valueisuninitalized))
       ((eq? (currentvar s) var) (currentvalue s))
-      (else (s_find var (cons (restofvars s) (list (restofvalues s))))))))
+      (else (s_find var (append (cons (restofvars s) (list (restofvalues s))) (nextlayer s)))))))
 
+;Get next layer, outside of the current layer
+(define nextlayer cddr)
 ;Get the current variable to be looked at in the state
 (define currentvar caar)
 ;Get the current value, that is mapped to current variable, to be looked at in the state
@@ -232,13 +247,14 @@ Functions that should return a boolean
 
 |#
 
-;checks if the variable is declared and in the state
+;checks if the variable is declared and in the state, in any layer
 ;checks if a variable is in var list
 (define s_isinstate?
   (lambda (var s)
-    (if (member? var (varsof s))
-        #t
-        #f)))
+    (cond
+      ((member? var (varsoflayer s)) #t)
+      ((pair? (nextlayer s)) (s_isinstate? var (nextlayer s)))
+      (else #f))))
 
 #|
 
@@ -333,3 +349,15 @@ Boolean function that returns booleans and helper function
     (if (or (eq? (operator expr) '*) (eq? (operator expr) '+) (eq? (operator expr) '-) (eq? (operator expr) '/) (eq? (operator expr) '%))
         #t
         #f)))
+
+
+
+
+
+
+;This is a simple way to check the parse tree of a textname ONLY FOR TESTING PURPOSES
+;function not implemented however, we can check for example a text file called "example.txt"
+;Included files are simpleparser.scm, lex.scm, this.rkt, and example.txt, three lines were uncommented in lex, two lines were uncommented in simpleparser, one line was commented in lex from the original sources
+(define check
+  (lambda (filename)
+    (parser filename)))
