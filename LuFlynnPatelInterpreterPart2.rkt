@@ -188,12 +188,16 @@ Functions that should return an updated state
       ((and (eq? (prefix expr) '=) (s_isinstate? (firstarg expr) s)) (s_add (firstarg expr) (m_value (secondarg expr) s) s))
       (else (error 'unexpectederror)))))
 
+;s_layer_add adds the var to the current layer of the state
+(define s_layer_add
+  (lambda (var val s)
+    (cond
+      (cons (s_add var val (car s)) (cdr s))))) ; state looks like (((local vars) (local vals))((global vars)(global vals)))
 
 ;Helper function that adds a variable to the state, possibly with a value. Also handles updating by removing a variable if it is already in the state and then reading it.
 (define s_add
   (lambda (var val s)
     (cond
-      ((s_isinstate? var s) (s_add var val (s_remove var s)))
       ((number? val) (cons (cons var (varsof s)) (list (cons val (valuesof s)))))
       ((eq? #t val) (cons (cons var (varsof s)) (list (cons 'true (valuesof s)))))
       ((eq? #f val) (cons (cons var (varsof s)) (list (cons 'false (valuesof s)))))
