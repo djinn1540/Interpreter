@@ -78,9 +78,53 @@ m_state should return a state
       ((eq? (stmttype parsedtree) 'begin) (m_state (cdr parsedtree) (removelayer (m_state (cdar parsedtree) (addlayer s) break continue return throw)) break continue return throw))
       ((eq? (stmttype parsedtree) 'continue) (continue s))
       ((eq? (stmttype parsedtree) 'break) (break s))
+      ((eq? (stmttype parsedtree) 'throw) (throw (m_state (cadr parsedtree) s break continue return throw)))
+      ((eq? (stmttype parsedtree) 'try) (m_state (cdr parsedtree) (removelayer (m_state_try (car parsedtree) (addlayer s) break continue return throw)) break continue return throw))
       ((member? (stmttype parsedtree) declop) (m_state (cdr parsedtree) (s_declassign (car parsedtree) s) break continue return throw))
       ((member? (stmttype parsedtree) whileop) (m_state (cdr parsedtree) (removelayer (call/cc (lambda (break) (m_state_while (car parsedtree) (addlayer s) break continue return throw)))) break continue return throw))
       ((member? (stmttype parsedtree) ifop) (m_state (cdr parsedtree) (removelayer (m_state_if (car parsedtree) (addlayer s) break continue return throw)) break continue return throw)))))
+
+(define secondkeyword caddr)
+(define thirdkeyword cadddr)
+
+(define istrycatch?
+  (lambda (lis)
+    (cond
+      ((null? lis) #f)
+      ((null? (operator lis)) #f)
+      ((null? (secondkeyword lis)) (error 'trywithoutfinally/catch))
+      ((eq? (thirdkeyword lis) 'finally) #f)
+      ((not (null? (thirdkeyword lis))) #f)
+      ((eq? (secondkeyword lis) 'catch) #t)
+      (else (error 'unexpectederror)))))
+
+(define istryfinally?
+  (lambda (lis)
+    (cond
+      ((null? lis) #f)
+      ((null? (operator lis)) #f)
+      ((null? (secondkeyword lis)) (error 'trywithoutfinally/catch))
+      ((not (null? (thirdkeyword lis))) #f)
+      ((eq? (secondkeyword lis) 'finally) #t)
+      (else (error 'unexpectederror)))))
+
+(define istrycatchfinally?
+  (lambda (lis)
+    (cond
+      ((null? lis) #f)
+      ((null? (operator lis)) #f)
+      ((null? (secondkeyword lis)) (error 'trywithoutfinally/catch))
+      ((not (null? (thirdkeyword lis))) #t)
+      (else (error 'unexpectederror)))))
+
+
+(define m_state_try
+  (lambda (expr s break continue return throw)
+    (cond
+      ((istrycatch? expr) (call/cc (lambda (throw) (m_state (append (cadr expr) (secondkeyword expr)) s break continue return throw))))
+      ((istryfinally? expr) (m_state (cdr expr) s break continue return throw))
+      ((istrycatchfinally? expr) (call/cc (lambda (throw) (m_state (append (cadr expr) (secondkeyword expr)) s break continue return throw))))
+      (else (error 'unexpectederror)))))
 
 (define blockparsedtree cdar)
 
