@@ -1,5 +1,5 @@
 ;Tommy Lu/Vishal Patel/Jamie Flynn
-;3/8/2018
+;2/19/18
 
 ;Import Parser
 (require "simpleparser.scm")
@@ -197,11 +197,26 @@ Functions that should return an updated state
       ((and (eq? (prefix expr) '=) (s_isinstate? (firstarg expr) s)) (s_add (firstarg expr) (m_value (secondarg expr) s) s))
       (else (error 'unexpectederror)))))
 
+;s_layer_add adds the var to the current layer of the state
+(define s_layer_add
+  (lambda (var val s)
+    (cond
+      (cons (s_add var val (car s)) (cdr s))))) ; state looks like (((local vars) (local vals))((global vars)(global vals)))
 
 ;Helper function that adds a variable to the state, possibly with a value. Also handles updating by removing a variable if it is already in the state and then reading it.
 (define s_add
   (lambda (var val s)
     (cond
+<<<<<<< HEAD
+      ((number? val) (cons (cons var (varsof s)) (list (cons val (valuesof s)))))
+      ((eq? #t val) (cons (cons var (varsof s)) (list (cons 'true (valuesof s)))))
+      ((eq? #f val) (cons (cons var (varsof s)) (list (cons 'false (valuesof s)))))
+      ((eq? 'true val) (cons (cons var (varsof s)) (list (cons 'true (valuesof s)))))
+      ((eq? 'false val) (cons (cons var (varsof s)) (list (cons 'false (valuesof s)))))
+      (else (cons (cons var (varsof s)) (list (cons (m_value val s) (valuesof s))))))))
+
+;Removes variable and its associated value
+=======
       ((s_isinstate? var s) (s_remove var val s))
       ((number? val) (append (cons (cons var (varsoflayer s)) (list (cons val (valuesoflayer s)))) (nextlayer s)))
       ((eq? #t val) (append (cons (cons var (varsoflayer s)) (list (cons 'true (valuesoflayer s)))) (nextlayer s)))
@@ -211,6 +226,7 @@ Functions that should return an updated state
       (else (append (cons (cons var (varsoflayer s)) (list (cons (m_value val s) (valuesoflayer s)))) (nextlayer s))))))
 
 ;Removes variable and its associated value then adds the var and new value associated with it to the earliest layer (most inner layer) it was found.
+>>>>>>> tom
 (define s_remove
   (lambda (var val s)
     (cond
