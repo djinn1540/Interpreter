@@ -1,5 +1,5 @@
 ;Tommy Lu/Vishal Patel/Jamie Flynn
-;3/8/2018
+;2/19/18
 
 ;Import Parser
 (require "simpleparser.scm")
@@ -78,7 +78,7 @@ m_state should return a state
 
 (define blockparsedtree cdar)
 
-(define
+(define addlayer
   (lambda (s)
     (append '(()()) s)))
 
