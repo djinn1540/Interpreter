@@ -8,8 +8,11 @@
 ;Start
 (define interpret
   (lambda (filename)
-    (s_find 'return (m_state (parser filename) emptystate))))
+    (call/cc
+     (lambda (return)
+       (m_state (parser filename) emptystate basicfunction basicfunction return basicfunction)))))
 
+(define basicfunction (lambda (v) (error "usage from main")))
 ;The empty state is defined as a list of two empty lists
 (define emptystate '(()()))
 
@@ -65,28 +68,30 @@ m_state should return a state
 
 ;m_state parses each statement and runs them through functions and states and handles returning the state to the interpreter
 (define m_state
-  (lambda (parsedtree s)
+  (lambda (parsedtree s break continue return throw)
     (cond
       ((null? parsedtree) s)
-      ((eq? (stmttype parsedtree) 'return) (m_return (car parsedtree) s))
-      ((member? (stmttype parsedtree) declop) (m_state (cdr parsedtree) (s_declassign (car parsedtree) s)))
-      ((member? (stmttype parsedtree) ifwhileop) (m_state (cdr parsedtree) (m_state_ifwhile (car parsedtree) s))))))
+      ((eq? (stmttype parsedtree) 'return) (m_return (car parsedtree) s return))
+      ((member? (stmttype parsedtree) declop) (m_state (cdr parsedtree) (s_declassign (car parsedtree) s) break continue return throw))
+      ((member? (stmttype parsedtree) ifwhileop) (m_state (cdr parsedtree) (m_state_ifwhile (car parsedtree) s break continue return throw) break continue return throw)))))
 
 
 ;Assigns 'return variable to a value/boolean in state and then returns the state
 (define m_return
-  (lambda (expr s)
+  (lambda (expr s return)
     (cond
-      ((not (null? (s_find 'return s))) s)
-      ((number? (firstarg expr)) (s_add 'return (firstarg expr) s))
-      ((eq? 'true (firstarg expr)) (s_add 'return (firstarg expr) s))
-      ((eq? 'false (firstarg expr)) (s_add 'return (firstarg expr) s))
-      ((and (pair? (firstarg expr)) (member? (prefix (firstarg expr)) arithop)) (s_add 'return (m_value (firstarg expr) s) s))
-      ((and (pair? (firstarg expr)) (member? (prefix (firstarg expr)) boolop)) (s_add 'return (m_bool (firstarg expr) s) s))
-      ((boolean? (s_find (firstarg expr) s)) (s_add 'return (s_find (firstarg expr) s) s))
-      (else (s_add 'return (s_find (firstarg expr) s) s)))))
+      ((and (pair? (firstarg expr)) (member? (prefix (firstarg expr)) arithop)) (return (m_value (firstarg expr) s)))
+      ((and (pair? (firstarg expr)) (member? (prefix (firstarg expr)) boolop)) (return (returntruefalse (m_bool (firstarg expr) s))))
+      ((number? (firstarg expr)) (return (firstarg expr)))
+      ((eq? 'true (firstarg expr)) (return (firstarg expr)))
+      ((eq? 'false (firstarg expr)) (return (firstarg expr)))
+      (else (return (s_find (firstarg expr) s))))))
 
-
+(define returntruefalse
+  (lambda (boolean)
+    (if boolean
+        'true
+        'false)))
 #|
 
 Functions that should return values
@@ -152,11 +157,11 @@ Functions that should return values
 
 ;takes an expression (list like '([if, while] (...) (...) (...)) and returns the state determined by the logic
 (define m_state_ifwhile
-  (lambda (expr s)
+  (lambda (expr s break continue return throw)
     (cond
-      ((eq? (operator expr) 'while) (if (m_bool (execcond expr) s) (m_state_ifwhile expr (m_state  (body expr) s)) s))
-      ((isIfElse expr) (if (m_bool (execcond expr) s) (m_state (body expr) s) (m_state (elsebody expr) s)))
-      ((isIf expr) (if (m_bool (execcond expr) s) (m_state (body expr) s) s))
+      ((eq? (operator expr) 'while) (if (m_bool (execcond expr) s) (m_state_ifwhile expr (m_state  (body expr) s break continue return throw) break continue return throw) s))
+      ((isIfElse expr) (if (m_bool (execcond expr) s) (m_state (body expr) s break continue return throw) (m_state (elsebody expr) s break continue return throw)))
+      ((isIf expr) (if (m_bool (execcond expr) s) (m_state (body expr) s break continue return throw) s))
       (else s)))); return 
 
 #|
