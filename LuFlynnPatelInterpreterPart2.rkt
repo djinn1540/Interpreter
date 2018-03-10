@@ -78,16 +78,19 @@ m_state should return a state
       ((eq? (stmttype parsedtree) 'begin) (m_state (cdr parsedtree) (removelayer (m_state (cdar parsedtree) (addlayer s) break continue return throw)) break continue return throw))
       ((eq? (stmttype parsedtree) 'continue) (continue s))
       ((eq? (stmttype parsedtree) 'break) (break s))
-      ((eq? (stmttype parsedtree) 'throw) (throw (m_state (cadar parsedtree) s break continue return throw)))
-      ((eq? (stmttype parsedtree) 'catch) s)
-      ((eq? (stmttype parsedtree) 'finally) (m_state (cdr parsedtree) (removelayer (m_state (cadar parsedtree) (addlayer s) break continue return throw)) break continue return throw))
+      ((eq? (stmttype parsedtree) 'throw) (throw (m_value (cdar parsedtree) s)))
+      ;((eq? (stmttype parsedtree) 'catch) s)
+      ;((eq? (stmttype parsedtree) 'finally) (m_state (cdr parsedtree) (removelayer (m_state (cadar parsedtree) (addlayer s) break continue return throw)) break continue return throw))
       ((eq? (stmttype parsedtree) 'try) (m_state (cdr parsedtree) (removelayer (m_state_try (car parsedtree) (addlayer s) break continue return throw)) break continue return throw))
       ((member? (stmttype parsedtree) declop) (m_state (cdr parsedtree) (s_declassign (car parsedtree) s) break continue return throw))
       ((member? (stmttype parsedtree) whileop) (m_state (cdr parsedtree) (removelayer (call/cc (lambda (break) (m_state_while (car parsedtree) (addlayer s) break continue return throw)))) break continue return throw))
       ((member? (stmttype parsedtree) ifop) (m_state (cdr parsedtree) (removelayer (m_state_if (car parsedtree) (addlayer s) break continue return throw)) break continue return throw)))))
 
-(define secondkeyword caddr)
-(define thirdkeyword cadddr)
+(define firstbody cadr)
+(define secondkeyword caaddr)
+(define secondbody (lambda (v) (cadr (caddr v))))
+(define thirdkeyword (lambda (lis) (car (cadddr lis))))
+(define thirdbody (lambda (lis) (cadr (cadddr lis))))
 
 (define istrycatch?
   (lambda (lis)
@@ -123,10 +126,10 @@ m_state should return a state
 (define m_state_try
   (lambda (expr s break continue return throw)
     (cond
-      ((istrycatch? expr) (call/cc (lambda (throw) (m_state (append (cadr expr) (list (secondkeyword expr))) s break continue return throw))))
-      ((istryfinally? expr) (m_state (cdr expr) s break continue return throw))
-      ((istrycatchfinally? expr) (m_state (list (thirdkeyword expr)) (call/cc (lambda (throw) (m_state (append (cadr expr) (list (secondkeyword expr))) s break continue return throw))) break continue return throw))
-      (else (error 'unexpectederror)))))
+      ((istrycatch? expr) (m_state (firstbody expr) s break continue return (lambda (v) (m_state (secondbody expr) v break continue return throw))));(call/cc (lambda (throw) (m_state (append (cadr expr) (list (secondkeyword expr))) s break continue return throw))))
+      ((istryfinally? expr) (m_state (secondbody expr)(m_state (firstbody expr) s break continue return throw) (lambda () (error "break within finally")) (lambda () (error "continue within finally")) (lambda () (error "return within finally")) (lambda () (error "throw from finally")))
+      ((istrycatchfinally? expr) (m_state (thirdbody expr) (m_state (firstbody expr) s break continue return (lambda (v) (m_state (secondbody expr) v break continue return throw))) (lambda () (error "break within finally")) (lambda () (error "continue within finally")) (lambda () (error "return within finally")) (lambda () (error "throw from finally"))));(m_state (list (thirdkeyword expr)) (call/cc (lambda (throw) (m_state (append (cadr expr) (list (secondkeyword expr))) s break continue return throw))) break continue return throw))
+      (else (error 'unexpectederror))))))
 
 (define blockparsedtree cdar)
 
