@@ -1,11 +1,11 @@
 ; If you are using racket instead of scheme, uncomment these two lines, comment the (load "simpleParser.scm") and uncomment the (require "simpleParser.scm")
- #lang racket
+; #lang racket
  (require "functionParser.scm")
-;(load "simpleParser.scm")
+;(load "functionParser.scm")
 
 
 ; An interpreter for the simple language that uses call/cc for the continuations.  Does not handle side effects.
-(define call/cc call-with-current-continuation)
+;(define call/cc call-with-current-continuation)
 
 
 ; The functions that start interpret-...  all return the current environment.
@@ -395,3 +395,7 @@
                             (makestr (string-append str (string-append " " (symbol->string (car vals)))) (cdr vals))))))
       (error-break (display (string-append str (makestr "" vals)))))))
 
+
+(define check
+  (lambda (filename)
+    (parser filename)))
