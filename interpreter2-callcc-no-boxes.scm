@@ -1,3 +1,5 @@
+; Tommy Lu/Vishal Patel/Jamie Flynn
+; twl23/vsp20/gjf20
 ; If you are using racket instead of scheme, uncomment these two lines, comment the (load "simpleParser.scm") and uncomment the (require "simpleParser.scm")
 ; #lang racket
  (require "functionParser.scm")
@@ -42,7 +44,25 @@
       ((eq? 'begin (statement-type statement)) (interpret-block statement environment return break continue throw))
       ((eq? 'throw (statement-type statement)) (interpret-throw statement environment throw))
       ((eq? 'try (statement-type statement)) (interpret-try statement environment return break continue throw))
+      ((eq? 'function (statement-type statement)) (interpret-function statement environment return))
       (else (myerror "Unknown statement:" (statement-type statement))))))
+
+
+;Currently only works with main - the idea is it evaluates the body of statement using an environment/state that has been updated with the argument list
+;3/27/18
+;for other functions need a different call/cc return or some sort.
+;car of statement is function
+;cadr of statement is name of function
+;cadddr of statement is the body of function
+;caddr of statement is the argument list
+(define interpret-function
+  (lambda (statement environment return)
+    (cond
+      ((eq? 'main (cadr statement)) (interpret-statement-list (cadddr statement) (interpret-statement-list (caddr statement) environment return
+                                  (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
+                                  (lambda (v env) (myerror "Uncaught exception thrown"))) return
+                                  (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
+                                  (lambda (v env) (myerror "Uncaught exception thrown")))))))
 
 ; Calls the return continuation with the given expression value
 (define interpret-return
