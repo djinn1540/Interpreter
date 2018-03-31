@@ -34,7 +34,7 @@
 (define interpret-statement
   (lambda (statement environment return break continue throw)
     (cond
-      ((eq? 'return (statement-type statement)) (interpret-return statement environment return))
+      ((eq? 'return (statement-type statement)) (interpret-return statement environment return break continue throw))
       ((eq? 'var (statement-type statement)) (interpret-declare statement environment))
       ((eq? '= (statement-type statement)) (interpret-assign statement environment))
       ((eq? 'if (statement-type statement)) (interpret-if statement environment return break continue throw))
@@ -45,28 +45,53 @@
       ((eq? 'throw (statement-type statement)) (interpret-throw statement environment throw))
       ((eq? 'try (statement-type statement)) (interpret-try statement environment return break continue throw))
       ((eq? 'function (statement-type statement)) (interpret-function statement environment return))
+      ((eq? 'funcall (statement-type statement)) (interpret-funcall statement environment))
       (else (myerror "Unknown statement:" (statement-type statement))))))
 
 
 ;Currently only works with main - the idea is it evaluates the body of statement using an environment/state that has been updated with the argument list
-;3/27/18
+;3/31/18
 ;for other functions need a different call/cc return or some sort.
 ;car of statement is function
 ;cadr of statement is name of function
 ;cadddr of statement is the body of function
-;caddr of statement is the argument list
+;caddr of statement is the argument list - TODO MAKE  new layer
 (define interpret-function
   (lambda (statement environment return)
     (cond
-      ((eq? 'main (cadr statement)) (interpret-statement-list (cadddr statement) (interpret-statement-list (caddr statement) environment return
+      ((eq? 'main (cadr statement)) (interpret-statement-list (cadddr statement) (interpret-statement-list (caddr statement) (push-frame environment) return
                                   (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown"))) return
                                   (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
+                                  (lambda (v env) (myerror "Uncaught exception thrown"))))
+      (else (insert (cadr statement) (cons (caddr statement) (cadddr statement)) environment)))))
+;get-value gets the function
+;function comes with two parathesised lines, that is (arg list) (body)
+;Where first (cadr (get-value (cadr statement))) gets body of function
+;Second (add-bindiing (caddr get-value (cadr statement)) (caddr statement (push-frame environment)) sets up the function by passing the actual parameters to formal and creating a function scope
+;Need to update state
+(define interpret-funcall
+  (lambda (statement environment)
+     (call/cc
+      (lambda (return)
+        ;Define pushframe addbinding, that is adding the argments to arglist to environment
+        (interpret-statement-list (cdr (lookup (cadr statement) environment)) (add-binding (car (lookup (cadr statement) environment)) (cddr statement) environment (push-frame (pop-frame environment))) return
+                                  (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown")))))))
+
+;Returns function environment, that is the environment viewed by function
+;At the moment error checks for too little parameters, however too many it simply stops once it gets enough formal parameters defined TODO
+(define add-binding
+  (lambda (formal actual environment functionenvironment)
+    (cond
+      ((null? formal) functionenvironment)
+      ((null? actual) myerror "Not enough parameters for function")
+      (else (add-binding (cdr formal) (cdr actual) environment (insert (car formal) (eval-expression (car actual) environment) functionenvironment))))))
+
 
 ; Calls the return continuation with the given expression value
 (define interpret-return
-  (lambda (statement environment return)
+  (lambda (statement environment return break continue throw)
     (return (eval-expression (get-expr statement) environment))))
 
 ; Adds a new variable binding to the environment.  There may be an assignment with the variable
@@ -163,7 +188,7 @@
       ((not (eq? (statement-type finally-statement) 'finally)) (myerror "Incorrectly formatted finally block"))
       (else (cons 'begin (cadr finally-statement))))))
 
-; Evaluates all possible boolean and arithmetic expressions, including constants and variables.
+; Evaluates all possible boolean and arithmetic expressions, including constants and variables. 
 (define eval-expression
   (lambda (expr environment)
     (cond
@@ -183,7 +208,7 @@
       ((and (eq? '- (operator expr)) (= 2 (length expr))) (- (eval-expression (operand1 expr) environment)))
       (else (eval-binary-op2 expr (eval-expression (operand1 expr) environment) environment)))))
 
-; Complete the evaluation of the binary operator by evaluating the second operand and performing the operation.
+; Complete the evaluation of the binary operator by evaluating the second operand and performing the operation. Also checks for functions TODO error check for functions without a return
 (define eval-binary-op2
   (lambda (expr op1value environment)
     (cond
@@ -200,6 +225,7 @@
       ((eq? '>= (operator expr)) (>= op1value (eval-expression (operand2 expr) environment)))
       ((eq? '|| (operator expr)) (or op1value (eval-expression (operand2 expr) environment)))
       ((eq? '&& (operator expr)) (and op1value (eval-expression (operand2 expr) environment)))
+      ((eq? 'funcall (operator expr)) (interpret-funcall expr environment))
       (else (myerror "Unknown operator:" (operator expr))))))
 
 ; Determines if two values are equal.  We need a special test because there are both boolean and integer types.
