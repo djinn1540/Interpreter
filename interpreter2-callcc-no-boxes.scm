@@ -304,6 +304,10 @@
 (define topframe car)
 (define remainingframes cdr)
 
+;------------------------------------------
+; Variable portion of Environment functions
+;------------------------------------------
+
 ; does a variable exist in the environment?
 (define exists?
   (lambda (var environment)
@@ -401,6 +405,79 @@
       ((eq? var (car varlist)) (cons (scheme->language val) (cdr vallist)))
       (else (cons (car vallist) (update-in-frame-store var val (cdr varlist) (cdr vallist)))))))
 
+; Returns the list of variables from a frame
+(define variables
+  (lambda (frame)
+    (car frame)))
+
+; Returns the store from a frame
+(define store
+  (lambda (frame)
+    (cadr frame)))
+
+;------------------------------------------
+; Function portion of Environment functions
+;------------------------------------------
+
+; does a function exist in the environment?
+(define func-exists?
+  (lambda (func environment)
+    (cond
+      ((null? environment) #f)
+      ((func-exists-in-list? func (functions (topframe environment))) #t)
+      (else (func-exists? func (remainingframes environment))))))
+
+; does a function exist in a list?
+(define func-exists-in-list?
+  (lambda (func l)
+    (cond
+      ((null? l) #f)
+      ((eq? func (car l)) #t)
+      (else (func-exists-in-list? func (cdr l))))))
+
+; Looks up function info in the environment.
+(define func-lookup
+  (lambda (func environment)
+    (lookup-function func environment)))
+  
+; A helper function that does the lookup.  Returns an error if the function does not have info associated with it
+(define lookup-function
+  (lambda (func environment)
+    (let ((info (lookup-func-in-env func environment)))
+      (if (null? info)
+          (myerror "error: function without parameters or body:" func) ;this may be a source of error (possible debug point)
+          info))))
+
+; Return the info bound to a function in the environment
+(define lookup-func-in-env
+  (lambda (func environment)
+    (cond
+      ((null? environment) (myerror "error: undefined variable" func))
+      ((func-exists-in-list? func (functions (topframe environment))) (lookup-func-in-frame func (topframe environment)))
+      (else (lookup-func-in-env func (cdr environment))))))
+
+; Return the info bound to a function in the frame
+(define lookup-func-in-frame
+  (lambda (func frame)
+    (cond
+      ((not (func-exists-in-list? func (functions frame))) (myerror "error: undefined function" func))
+      (else (get-info (indexof-func func (functions frame)) (func-info frame))))))
+
+; Get the location of a function name in a list of names
+(define indexof-func
+  (lambda (func l)
+    (cond
+      ((null? l) 0)  ; should not happen
+      ((eq? func (car l)) 0)
+      (else (+ 1 (indexof-func func (cdr l)))))))
+
+; Get the function info stored at a given index in the list
+(define get-info
+  (lambda (n l)
+    (cond
+      ((zero? n) (car l))
+      (else (get-info (- n 1) (cdr l))))))
+
 ; Adds a new function/function-info binding pair into the environment.  Gives an error if the function already exists in this frame.
 
 (define insert-func
@@ -414,16 +491,6 @@
 (define add-func-to-frame
   (lambda (func info frame)
     (list (cons func (functions frame)) (cons info (func-info frame)))))
-
-; Returns the list of variables from a frame
-(define variables
-  (lambda (frame)
-    (car frame)))
-
-; Returns the store from a frame
-(define store
-  (lambda (frame)
-    (cadr frame)))
 
 ;returns the list of functions from a frame
 (define functions
