@@ -415,6 +415,24 @@
   (lambda (frame)
     (cadr frame)))
 
+; Functions to convert the Scheme #t and #f to our languages true and false, and back.
+
+(define language->scheme
+  (lambda (v) 
+    (cond 
+      ((eq? v 'false) #f)
+      ((eq? v 'true) #t)
+      (else v))))
+
+(define scheme->language
+  (lambda (v)
+    (cond
+      ((eq? v #f) 'false)
+      ((eq? v #t) 'true)
+      (else v))))
+
+
+
 ;------------------------------------------
 ; Function portion of Environment functions
 ;------------------------------------------
@@ -492,31 +510,26 @@
   (lambda (func info frame)
     (list (cons func (functions frame)) (cons info (func-info frame)))))
 
-;returns the list of functions from a frame
+; returns the list of functions from a frame
 (define functions
   (lambda (frame)
     (caddr frame)))
 
-;returns the function info from a frame
+; returns the function info from a frame
 (define func-info
   (lambda (frame)
     (car (cdddr frame))))
 
-; Functions to convert the Scheme #t and #f to our languages true and false, and back.
+; returns the function parameter list from the function info - info formatted: ((parameter list) (statement list for the function body))
+(define param-list
+  (lambda (info)
+    (car info)))
 
-(define language->scheme
-  (lambda (v) 
-    (cond 
-      ((eq? v 'false) #f)
-      ((eq? v 'true) #t)
-      (else v))))
+; returns the body of the function, stored as the raw parse tree statement list 
 
-(define scheme->language
-  (lambda (v)
-    (cond
-      ((eq? v #f) 'false)
-      ((eq? v #t) 'true)
-      (else v))))
+(define body
+  (lambda (info)
+    (cadr info)))
 
 
 
