@@ -288,7 +288,7 @@
 ; create an empty frame: a frame is two lists, the first are the variables and the second is the "store" of values
 (define newframe
   (lambda ()
-    '(() ())))
+    '(() () () ()))) ; the format is ( (variable names) (variable values) (function names) (function values) ) where a function value is ( (function parameter names - we need these to add the params into the new environment layer) (the function body statement list) ) 
 
 ; add a frame onto the top of the environment
 (define push-frame
@@ -401,6 +401,20 @@
       ((eq? var (car varlist)) (cons (scheme->language val) (cdr vallist)))
       (else (cons (car vallist) (update-in-frame-store var val (cdr varlist) (cdr vallist)))))))
 
+; Adds a new function/function-info binding pair into the environment.  Gives an error if the function already exists in this frame.
+
+(define insert-func
+  (lambda (func info environment)
+    (if (exists-in-list? func (functions (car environment)))
+        (myerror "error: variable is being re-declared:" func)
+        (cons (add-func-to-frame func info (car environment)) (cdr environment)))))
+
+; Add a new variable/value pair to the frame.
+
+(define add-func-to-frame
+  (lambda (func info frame)
+    (list (cons func (functions frame)) (cons info (func-info frame)))))
+
 ; Returns the list of variables from a frame
 (define variables
   (lambda (frame)
@@ -410,6 +424,16 @@
 (define store
   (lambda (frame)
     (cadr frame)))
+
+;returns the list of functions from a frame
+(define functions
+  (lambda (frame)
+    (caddr frame)))
+
+;returns the function info from a frame
+(define func-info
+  (lambda (frame)
+    (car (cdddr frame))))
 
 ; Functions to convert the Scheme #t and #f to our languages true and false, and back.
 
@@ -442,6 +466,7 @@
       (error-break (display (string-append str (makestr "" vals)))))))
 
 
+;check prints the parse tree to the console - for programmer informational purposes 
 (define check
   (lambda (filename)
     (parser filename)))
