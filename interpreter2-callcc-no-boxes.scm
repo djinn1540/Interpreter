@@ -90,7 +90,7 @@
       (lambda (return)
         (interpret-statement-list (body (func-lookup (cadr statement) environment))
                                   (add-binding (param-list (func-lookup (cadr statement) environment)) (cddr statement) environment (push-frame (get-func-environment (cadr statement) environment)) throw)
-                                  return
+                                  (lambda (v) (return (append (get-pertinent-frames (cadr statement) v)))) 
                                   (lambda (env) (myerror "Break used outside of loop"))
                                   (lambda (env) (myerror "Continue used outside of loop"))
                                   throw)))))
