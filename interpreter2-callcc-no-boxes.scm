@@ -214,7 +214,7 @@
       ((number? expr) expr)
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
-      ((func-exists? expr environment) (func-lookup expr environment)) ; todo: this line seems wrong, maybe should be (interpret-statement-list (body (func-lookup expr environment)) (env for the funct "expr")
+      ((and (list? expr) (eq? 'funcall (operator expr))) (interpret-funcall expr environment throw))
       ((not (list? expr)) (lookup expr environment))
       (else (eval-operator expr environment throw)))))
 
@@ -245,7 +245,6 @@
       ((eq? '>= (operator expr)) (>= op1value (eval-expression (operand2 expr) environment throw)))
       ((eq? '|| (operator expr)) (or op1value (eval-expression (operand2 expr) environment throw)))
       ((eq? '&& (operator expr)) (and op1value (eval-expression (operand2 expr) environment throw)))
-      ((eq? 'funcall (operator expr)) (interpret-funcall expr environment throw))
       (else (myerror "Unknown operator:" (operator expr))))))
 
 ; Determines if two values are equal.  We need a special test because there are both boolean and integer types.
