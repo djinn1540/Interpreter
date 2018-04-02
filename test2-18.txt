@@ -1,4 +1,5 @@
-function main (){
+function main(){
+
 var x = 10;
 var result = 1;
 
