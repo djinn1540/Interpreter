@@ -75,7 +75,7 @@
      (call/cc
       (lambda (return)
         ;Define pushframe addbinding, that is adding the argments to arglist to environment
-        (interpret-statement-list (body (func-lookup (cadr statement) environment)) (add-binding (car (lookup (cadr statement) environment)) (cddr statement) environment (push-frame (pop-frame environment))) return
+        (interpret-statement-list (body (func-lookup (cadr statement) environment)) (add-binding (param-list (func-lookup (cadr statement) environment)) (cddr statement) environment (push-frame (get-func-environment environment))) return
                                   (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown")))))))
 
@@ -84,8 +84,9 @@
 (define add-binding
   (lambda (formal actual environment functionenvironment)
     (cond
-      ((null? formal) functionenvironment)
-      ((null? actual) myerror "Not enough parameters for function")
+      ((and (null? formal) (null? actual)) functionenvironment)
+      ((null? formal) my error "Too many arguments in function call")
+      ((null? actual) myerror "Not enough arguments provided in function call")
       (else (add-binding (cdr formal) (cdr actual) environment (insert (car formal) (eval-expression (car actual) environment) functionenvironment))))))
 
 
