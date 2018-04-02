@@ -53,7 +53,7 @@
 (define interpret-statement
   (lambda (statement environment return break continue throw)
     (cond
-      ((eq? 'return (statement-type statement)) (interpret-return statement environment return break continue throw))
+      ((eq? 'return (statement-type statement)) (interpret-return statement environment return break continue throw)) ;todo we can insert a (cons env ("rest of line... interpret-blah" because the interpret-blah still gives us the value 
       ((eq? 'var (statement-type statement)) (interpret-declare statement environment throw))
       ((eq? '= (statement-type statement)) (interpret-assign statement environment throw))
       ((eq? 'if (statement-type statement)) (interpret-if statement environment return break continue throw))
@@ -64,7 +64,7 @@
       ((eq? 'throw (statement-type statement)) (interpret-throw statement environment throw))
       ((eq? 'try (statement-type statement)) (interpret-try statement environment return break continue throw))
       ((eq? 'function (statement-type statement)) (interpret-function statement environment))
-      ((eq? 'funcall (statement-type statement)) (interpret-funcall statement environment throw))
+      ((eq? 'funcall (statement-type statement)) (interpret-funcall statement environment throw));; todo if we put the code to reappend the other frames in this function, it should work,  we can also slip in our processing of the ((env) (return val)) tuple
       (else (myerror "Unknown statement:" (statement-type statement))))))
 
 
@@ -210,10 +210,11 @@
 (define eval-expression
   (lambda (expr environment throw)
     (cond
+      ;((null? expr) environment) ; enables use of return;
       ((number? expr) expr)
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
-      ((func-exists? expr environment) (func-lookup expr environment))
+      ((func-exists? expr environment) (func-lookup expr environment)) ; todo: this line seems wrong, maybe should be (interpret-statement-list (body (func-lookup expr environment)) (env for the funct "expr")
       ((not (list? expr)) (lookup expr environment))
       (else (eval-operator expr environment throw)))))
 
@@ -463,7 +464,14 @@
     (if (func-exists-in-list? func (functions (topframe environment)))
         environment
         (get-func-environment func (cdr environment)))))
-    
+
+; returns the list of frames that are not used by the function
+
+(define get-nonpertinent-frames
+  (lambda (func environment)
+    (if (func-exists-in-list? func (functions (topframe environment)))
+        '()
+        (cons (topframe environment) (get-nonpertinent-frames func (cdr environment))))))
 
 ; does a function exist in the environment?
 (define func-exists?
@@ -528,7 +536,7 @@
 
 (define insert-func
   (lambda (func info environment)
-    (if (exists-in-list? func (functions (car environment)))
+    (if (func-exists-in-list? func (functions (car environment)))
         (myerror "error: function is being re-declared:" func)
         (cons (add-func-to-frame func info (car environment)) (cdr environment)))))
 
