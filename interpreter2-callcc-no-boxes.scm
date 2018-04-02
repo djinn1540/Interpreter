@@ -75,7 +75,7 @@
      (call/cc
       (lambda (return)
         ;Define pushframe addbinding, that is adding the argments to arglist to environment
-        (interpret-statement-list (cdr (lookup (cadr statement) environment)) (add-binding (car (lookup (cadr statement) environment)) (cddr statement) environment (push-frame (pop-frame environment))) return
+        (interpret-statement-list (body (func-lookup (cadr statement) environment)) (add-binding (car (lookup (cadr statement) environment)) (cddr statement) environment (push-frame (pop-frame environment))) return
                                   (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown")))))))
 
@@ -384,7 +384,7 @@
 ; Add a new variable/value pair to the frame.
 (define add-to-frame
   (lambda (var val frame)
-    (list (cons var (variables frame)) (cons (scheme->language val) (store frame)))))
+    (list (cons var (variables frame)) (cons (scheme->language val) (store frame)) (functions frame) (func-info frame))))
 
 ; Changes the binding of a variable in the environment to a new value
 (define update-existing
@@ -396,7 +396,7 @@
 ; Changes the binding of a variable in the frame to a new value.
 (define update-in-frame
   (lambda (var val frame)
-    (list (variables frame) (update-in-frame-store var val (variables frame) (store frame)))))
+    (list (variables frame) (update-in-frame-store var val (variables frame) (store frame)) (functions frame) (func-info frame))))
 
 ; Changes a variable binding by placing the new value in the appropriate place in the store
 (define update-in-frame-store
@@ -517,7 +517,7 @@
 
 (define add-func-to-frame
   (lambda (func info frame)
-    (list (cons func (functions frame)) (cons info (func-info frame)))))
+    (list (variables frame) (store frame) (cons func (functions frame)) (cons info (func-info frame)))))
 
 ; returns the list of functions from a frame
 (define functions
