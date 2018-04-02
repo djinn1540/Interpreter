@@ -369,7 +369,7 @@
   (lambda (var frame)
     (cond
       ((not (exists-in-list? var (variables frame))) (myerror "error: undefined variable" var))
-      (else (unbox (language->scheme (get-value (indexof var (variables frame)) (store frame))))))))
+      (else (language->scheme (get-value (indexof var (variables frame)) (store frame)))))))
 
 ; Get the location of a name in a list of names
 (define indexof
@@ -403,7 +403,7 @@
 ; Add a new variable/value pair to the frame.
 (define add-to-frame
   (lambda (var val frame)
-    (list (cons var (variables frame)) (cons (box (scheme->language val)) (store frame)))))
+    (list (cons var (variables frame)) (cons (scheme->language val) (store frame)) (functions frame) (func-info frame))))
 
 ; Changes the binding of a variable in the environment to a new value
 (define update-existing
@@ -421,7 +421,7 @@
 (define update-in-frame-store
   (lambda (var val varlist vallist)
     (cond
-      ((eq? var (car varlist)) (cons (box (scheme->language val)) (cdr vallist)))
+      ((eq? var (car varlist)) (cons (scheme->language val) (cdr vallist)))
       (else (cons (car vallist) (update-in-frame-store var val (cdr varlist) (cdr vallist)))))))
 
 ; Returns the list of variables from a frame
