@@ -64,7 +64,7 @@
                                   (lambda (v env) (myerror "Uncaught exception thrown"))) return
                                   (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown"))))
-      (else (insert (cadr statement) (cons (caddr statement) (cadddr statement)) environment)))))
+      (else (insert-func (cadr statement) (cons (caddr statement) (cadddr statement)) environment)))))
 ;get-value gets the function
 ;function comes with two parathesised lines, that is (arg list) (body)
 ;Where first (cadr (get-value (cadr statement))) gets body of function
@@ -436,6 +436,15 @@
 ;------------------------------------------
 ; Function portion of Environment functions
 ;------------------------------------------
+
+; returns the environment specific to the given function
+
+(define get-func-environment
+  (lambda (func environment)
+    (if (func-exist-in-list? (topframe environment))
+        environment
+        (get-func-environment func (cdr environment)))))
+    
 
 ; does a function exist in the environment?
 (define func-exists?
