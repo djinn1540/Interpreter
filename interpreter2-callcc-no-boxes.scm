@@ -19,23 +19,24 @@
     (scheme->language
      (call/cc
       (lambda (return)
-        (interpret-statement-list (cdr (lookup 'main (interpret-statement-list-raw (parser file) (newenvironment)))) (push-frame (interpret-statement-list-raw (parser file) (newenvironment))) return
+        (interpret-statement-list (body (func-lookup 'main (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown")))))
+                                  (push-frame (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown")))) return
                                   (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown"))))))))
 ;uses cdr (lookup 'main) because body defined does cadr, which is the bodylist like so ((var x) (var y)), whereas we need (((var x) (var y)))
 
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
 (define interpret-statement-list-raw
-  (lambda (statement-list environment)
+  (lambda (statement-list environment throw)
     (if (null? statement-list)
         environment
-        (interpret-statement-list-raw (cdr statement-list) (interpret-statement-raw (car statement-list) environment)))))
+        (interpret-statement-list-raw (cdr statement-list) (interpret-statement-raw (car statement-list) environment throw) throw))))
 
 ; interpret a statement in the environment with continuations for return, break, continue, throw
 (define interpret-statement-raw
-  (lambda (statement environment)
+  (lambda (statement environment throw)
     (cond
-      ((eq? 'var (statement-type statement)) (interpret-declare statement environment))
+      ((eq? 'var (statement-type statement)) (interpret-declare statement environment throw))
       ((eq? '= (statement-type statement)) (interpret-assign statement environment))
       ((eq? 'function (statement-type statement)) (interpret-function statement environment))
       (else (myerror "Illegal Statement:" (statement-type statement))))))
@@ -62,7 +63,7 @@
       ((eq? 'begin (statement-type statement)) (interpret-block statement environment return break continue throw))
       ((eq? 'throw (statement-type statement)) (interpret-throw statement environment throw))
       ((eq? 'try (statement-type statement)) (interpret-try statement environment return break continue throw))
-      ((eq? 'function (statement-type statement)) (interpret-function statement environment return))
+      ((eq? 'function (statement-type statement)) (interpret-function statement environment))
       ((eq? 'funcall (statement-type statement)) (interpret-funcall statement environment throw))
       (else (myerror "Unknown statement:" (statement-type statement))))))
 
@@ -75,8 +76,7 @@
 ;cadddr of statement is the body of function
 ;caddr of statement is the argument list - TODO MAKE  new layer
 (define interpret-function
-
-  (lambda (statement environment return)
+  (lambda (statement environment)
     (insert-func (cadr statement) (list (caddr statement) (cadddr statement)) environment)))
 ;function comes with two parathesised lines, that is (arg list) (body)
 ;Where first (cadr (get-info (cadr statement))) gets body of function
@@ -88,7 +88,11 @@
   (lambda (statement environment throw)
     (call/cc
       (lambda (return)
-        (interpret-statement-list (body (func-lookup (cadr statement) environment)) (add-binding (param-list (func-lookup (cadr statement) environment)) (cddr statement) environment (push-frame (get-func-environment environment))) return
+        (interpret-statement-list (body (func-lookup (cadr statement) environment))
+                                  (add-binding (param-list (func-lookup (cadr statement) environment)) (cddr statement) environment (push-frame (get-func-environment (cadr statement) environment)) throw)
+                                  return
+                                  (lambda (env) (myerror "Break used outside of loop"))
+                                  (lambda (env) (myerror "Continue used outside of loop"))
                                   throw)))))
 
 
@@ -209,6 +213,7 @@
       ((number? expr) expr)
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
+      ((func-exists? expr environment) (func-lookup expr environment))
       ((not (list? expr)) (lookup expr environment))
       (else (eval-operator expr environment throw)))))
 
@@ -218,7 +223,7 @@
 (define eval-operator
   (lambda (expr environment throw)
     (cond
-      ((eq? '! (operator expr)) (not (eval-expression (operand1 expr) environment)))
+      ((eq? '! (operator expr)) (not (eval-expression (operand1 expr) environment throw)))
       ((and (eq? '- (operator expr)) (= 2 (length expr))) (- (eval-expression (operand1 expr) environment)))
       (else (eval-binary-op2 expr (eval-expression (operand1 expr) environment throw) environment throw)))))
 
@@ -455,7 +460,7 @@
 
 (define get-func-environment
   (lambda (func environment)
-    (if (func-exist-in-list? (topframe environment))
+    (if (func-exists-in-list? func (functions (topframe environment)))
         environment
         (get-func-environment func (cdr environment)))))
     
