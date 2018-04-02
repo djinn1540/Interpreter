@@ -58,16 +58,11 @@
 ;caddr of statement is the argument list - TODO MAKE  new layer
 (define interpret-function
   (lambda (statement environment return)
-    (cond
-      ((eq? 'main (cadr statement)) (interpret-statement-list (cadddr statement) (interpret-statement-list (caddr statement) (push-frame environment) return
-                                  (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
-                                  (lambda (v env) (myerror "Uncaught exception thrown"))) return
-                                  (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
-                                  (lambda (v env) (myerror "Uncaught exception thrown"))))
-      (else (insert-func (cadr statement) (cons (caddr statement) (cadddr statement)) environment)))))
+    (insert-func (cadr statement) (list (caddr statement) (cadddr statement)) environment)))
+
 ;get-value gets the function
 ;function comes with two parathesised lines, that is (arg list) (body)
-;Where first (cadr (get-value (cadr statement))) gets body of function
+;Where first (cadr (get-info (cadr statement))) gets body of function
 ;Second (add-bindiing (caddr get-value (cadr statement)) (caddr statement (push-frame environment)) sets up the function by passing the actual parameters to formal and creating a function scope
 ;Need to update state
 (define interpret-funcall
@@ -480,7 +475,7 @@
 (define lookup-func-in-env
   (lambda (func environment)
     (cond
-      ((null? environment) (myerror "error: undefined variable" func))
+      ((null? environment) (myerror "error: undefined function" func))
       ((func-exists-in-list? func (functions (topframe environment))) (lookup-func-in-frame func (topframe environment)))
       (else (lookup-func-in-env func (cdr environment))))))
 
@@ -511,7 +506,7 @@
 (define insert-func
   (lambda (func info environment)
     (if (exists-in-list? func (functions (car environment)))
-        (myerror "error: variable is being re-declared:" func)
+        (myerror "error: function is being re-declared:" func)
         (cons (add-func-to-frame func info (car environment)) (cdr environment)))))
 
 ; Add a new variable/value pair to the frame.
