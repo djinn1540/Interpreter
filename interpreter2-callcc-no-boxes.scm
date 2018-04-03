@@ -292,10 +292,10 @@
 (define get-finally operand3)
 
 ; these helper functions define function related statements
-(define cadr func-name)
-(define caddr func-arg-list)
-(define cadddr func-body)
-(define cddr func-actual-param)
+(define func-name cadr)
+(define func-arg-list caddr)
+(define func-body cadddr)
+(define func-actual-param cddr)
 
 (define catch-var
   (lambda (catch-statement)
