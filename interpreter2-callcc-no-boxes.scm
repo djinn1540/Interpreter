@@ -180,13 +180,13 @@
       ((not (eq? 'catch (statement-type catch-statement))) (myerror "Incorrect catch statement"))
       (else (lambda (ex env)
               (jump (interpret-block finally-block
-                                     (pop-frame (interpret-statement-list 
+                                     (interpret-statement-list 
                                                  (get-body catch-statement) 
-                                                 (insert (catch-var catch-statement) ex (push-frame env))
+                                                 (insert (catch-var catch-statement) ex environment)
                                                  return 
                                                  (lambda (env2) (break (pop-frame env2))) 
                                                  (lambda (env2) (continue (pop-frame env2))) 
-                                                 (lambda (v env2) (throw v (pop-frame env2)))))
+                                                 (lambda (v env2) (throw v environment)))
                                      return break continue throw)))))))
 
 ; To interpret a try block, we must adjust  the return, break, continue continuations to interpret the finally block if any of them are used.
