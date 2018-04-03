@@ -20,8 +20,10 @@
      (call/cc
       (lambda (return)
         (interpret-statement-list (body (func-lookup 'main (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown")))))
-                                  (push-frame (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown")))) return
-                                  (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
+                                  (push-frame (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))
+                                  (lambda (v ) (return v))
+                                  (lambda (env) (myerror "Break used outside of loop"))
+                                  (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown"))))))))
 ;uses cdr (lookup 'main) because body defined does cadr, which is the bodylist like so ((var x) (var y)), whereas we need (((var x) (var y)))
 
@@ -64,7 +66,7 @@
       ((eq? 'throw (statement-type statement)) (interpret-throw statement environment throw))
       ((eq? 'try (statement-type statement)) (interpret-try statement environment return break continue throw))
       ((eq? 'function (statement-type statement)) (interpret-function statement environment))
-      ((eq? 'funcall (statement-type statement)) (interpret-funcall statement environment throw));; todo if we put the code to reappend the other frames in this function, it should work,  we can also slip in our processing of the ((env) (return val)) tuple
+      ((eq? 'funcall (statement-type statement)) (interpret-funcall-state statement environment throw));; todo if we put the code to reappend the other frames in this function, it should work,  we can also slip in our processing of the ((env) (return val)) tuple
       (else (myerror "Unknown statement:" (statement-type statement))))))
 
 
@@ -84,18 +86,27 @@
 ;Need to update state
 ;TODO when a function is called, its scope should be any layers to the right of where it was declared, thus a function environment maker is necessary
 ;for ex. ( ((a b) (1 2) ()()) (()()()()) ((--)(--)(function) (functionval)) ) as of 7:16PM, all this does is pop the first layer, thus test 16 does not pass. Since in this case function is only limited to the rightmost layer
-(define interpret-funcall
+(define interpret-funcall-value
   (lambda (statement environment throw)
     (call/cc
       (lambda (return)
         (interpret-statement-list (body (func-lookup (cadr statement) environment))
                                   (add-binding (param-list (func-lookup (cadr statement) environment)) (cddr statement) environment (push-frame (get-func-environment (cadr statement) environment)) throw)
-                                  (lambda (v) (return (append (get-nonpertinent-frames (cadr statement) v)))) 
+                                  (lambda (v) (return v)) 
                                   (lambda (env) (myerror "Break used outside of loop"))
                                   (lambda (env) (myerror "Continue used outside of loop"))
                                   throw)))))
 
-
+(define interpret-funcall-state
+  (lambda (statement environment throw)
+    (call/cc
+      (lambda (return)
+        (interpret-statement-list (body (func-lookup (cadr statement) environment))
+                                  (add-binding (param-list (func-lookup (cadr statement) environment)) (cddr statement) environment (push-frame (get-func-environment (cadr statement) environment)) throw)
+                                  (lambda (v) (return environment)) 
+                                  (lambda (env) (myerror "Break used outside of loop"))
+                                  (lambda (env) (myerror "Continue used outside of loop"))
+                                  throw)))))
 ;Returns function environment, that is the environment viewed by function
 ;At the moment error checks for too little parameters, however too many it simply stops once it gets enough formal parameters defined TODO
 (define add-binding
@@ -214,7 +225,7 @@
       ((number? expr) expr)
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
-      ((and (list? expr) (eq? 'funcall (operator expr))) (interpret-funcall expr environment throw))
+      ((and (list? expr) (eq? 'funcall (operator expr))) (interpret-funcall-value expr environment throw))
       ((not (list? expr)) (lookup expr environment))
       (else (eval-operator expr environment throw)))))
 
@@ -369,7 +380,7 @@
   (lambda (var frame)
     (cond
       ((not (exists-in-list? var (variables frame))) (myerror "error: undefined variable" var))
-      (else (unbox(language->scheme (get-value (indexof var (variables frame)) (store frame))))))))
+      (else (language->scheme (unbox (get-value (indexof var (variables frame)) (store frame))))))))
 
 ; Get the location of a name in a list of names
 (define indexof
@@ -421,7 +432,7 @@
 (define update-in-frame-store
   (lambda (var val varlist vallist)
     (cond
-      ((eq? var (car varlist)) (cons (box (scheme->language val)) (cdr vallist)))
+      ((and (eq? var (car varlist)) (void? (set-box! (car vallist) (scheme->language val)))) vallist)
       (else (cons (car vallist) (update-in-frame-store var val (cdr varlist) (cdr vallist)))))))
 
 ; Returns the list of variables from a frame
