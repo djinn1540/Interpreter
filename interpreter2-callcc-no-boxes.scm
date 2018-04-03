@@ -236,7 +236,7 @@
   (lambda (expr environment throw)
     (cond
       ((eq? '! (operator expr)) (not (eval-expression (operand1 expr) environment throw)))
-      ((and (eq? '- (operator expr)) (= 2 (length expr))) (- (eval-expression (operand1 expr) environment)))
+      ((and (eq? '- (operator expr)) (= 2 (length expr))) (- (eval-expression (operand1 expr) environment throw)))
       (else (eval-binary-op2 expr (eval-expression (operand1 expr) environment throw) environment throw)))))
 
 ; Complete the evaluation of the binary operator by evaluating the second operand and performing the operation. Also checks for functions TODO error check for functions without a return
