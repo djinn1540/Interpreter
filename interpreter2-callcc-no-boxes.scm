@@ -4,7 +4,7 @@
 ; #lang racket
  (require "functionParser.scm")
 ;(load "functionParser.scm")
-(require racket/trace)
+;(require racket/trace)
 
 ; An interpreter for the simple language that uses call/cc for the continuations.  Does not handle side effects.
 ;(define call/cc call-with-current-continuation)
@@ -25,7 +25,6 @@
                                   (lambda (env) (myerror "Break used outside of loop"))
                                   (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown"))))))))
-;uses cdr (lookup 'main) because body defined does cadr, which is the bodylist like so ((var x) (var y)), whereas we need (((var x) (var y)))
 
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
 (define interpret-statement-list-raw
@@ -55,7 +54,7 @@
 (define interpret-statement
   (lambda (statement environment return break continue throw)
     (cond
-      ((eq? 'return (statement-type statement)) (interpret-return statement environment return break continue throw)) ;todo we can insert a (cons env ("rest of line... interpret-blah" because the interpret-blah still gives us the value 
+      ((eq? 'return (statement-type statement)) (interpret-return statement environment return break continue throw))
       ((eq? 'var (statement-type statement)) (interpret-declare statement environment throw))
       ((eq? '= (statement-type statement)) (interpret-assign statement environment throw))
       ((eq? 'if (statement-type statement)) (interpret-if statement environment return break continue throw))
@@ -66,58 +65,8 @@
       ((eq? 'throw (statement-type statement)) (interpret-throw statement environment throw))
       ((eq? 'try (statement-type statement)) (interpret-try statement environment return break continue throw))
       ((eq? 'function (statement-type statement)) (interpret-function statement environment))
-      ((eq? 'funcall (statement-type statement)) (interpret-funcall-state statement environment throw));; todo if we put the code to reappend the other frames in this function, it should work,  we can also slip in our processing of the ((env) (return val)) tuple
+      ((eq? 'funcall (statement-type statement)) (interpret-funcall-state statement environment throw))
       (else (myerror "Unknown statement:" (statement-type statement))))))
-
-
-;Currently only works with main - the idea is it evaluates the body of statement using an environment/state that has been updated with the argument list
-;3/31/18
-;for other functions need a different call/cc return or some sort.
-;car of statement is function
-;cadr of statement is name of function
-;cadddr of statement is the body of function
-;caddr of statement is the argument list - TODO MAKE  new layer
-(define interpret-function
-  (lambda (statement environment)
-    (insert-func (cadr statement) (list (caddr statement) (cadddr statement)) environment)))
-;function comes with two parathesised lines, that is (arg list) (body)
-;Where first (cadr (get-info (cadr statement))) gets body of function
-;Second (add-bindiing (caddr get-value (cadr statement)) (caddr statement (push-frame environment)) sets up the function by passing the actual parameters to formal and creating a function scope
-;Need to update state
-;TODO when a function is called, its scope should be any layers to the right of where it was declared, thus a function environment maker is necessary
-;for ex. ( ((a b) (1 2) ()()) (()()()()) ((--)(--)(function) (functionval)) ) as of 7:16PM, all this does is pop the first layer, thus test 16 does not pass. Since in this case function is only limited to the rightmost layer
-(define interpret-funcall-value
-  (lambda (statement environment throw)
-    (call/cc
-      (lambda (return)
-        (interpret-statement-list (body (func-lookup (cadr statement) environment))
-                                  (add-binding (param-list (func-lookup (cadr statement) environment)) (cddr statement) environment (push-frame (get-func-environment (cadr statement) environment)) throw)
-                                  (lambda (v) (return v)) 
-                                  (lambda (env) (myerror "Break used outside of loop"))
-                                  (lambda (env) (myerror "Continue used outside of loop"))
-                                  throw)))))
-
-(define interpret-funcall-state
-  (lambda (statement environment throw)
-    (call/cc
-      (lambda (return)
-        (if (null? (interpret-statement-list (body (func-lookup (cadr statement) environment))
-                                  (add-binding (param-list (func-lookup (cadr statement) environment)) (cddr statement) environment (push-frame (get-func-environment (cadr statement) environment)) throw)
-                                  (lambda (v) (return environment)) 
-                                  (lambda (env) (myerror "Break used outside of loop"))
-                                  (lambda (env) (myerror "Continue used outside of loop"))
-                                  throw))
-            environment
-            environment)))))
-;Returns function environment, that is the environment viewed by function
-;At the moment error checks for too little parameters, however too many it simply stops once it gets enough formal parameters defined TODO
-(define add-binding
-  (lambda (formal actual environment functionenvironment throw)
-    (cond
-      ((and (null? formal) (null? actual)) functionenvironment)
-      ((null? formal) myerror "Too many parameters for function")
-      ((null? actual) myerror "Not enough parameters for function")
-      (else (add-binding (cdr formal) (cdr actual) environment (insert (car formal) (eval-expression (car actual) environment throw) functionenvironment) throw)))))
 
 
 ; Calls the return continuation with the given expression value
@@ -220,11 +169,49 @@
       ((not (eq? (statement-type finally-statement) 'finally)) (myerror "Incorrectly formatted finally block"))
       (else (cons 'begin (cadr finally-statement))))))
 
+;Inserts function into current frame to be called
+(define interpret-function
+  (lambda (statement environment)
+    (insert-func (func-name statement) (list (func-arg-list statement) (func-body statement)) environment)))
+
+
+;Sets up the function by passing the actual parameters to formal and creating a function scope.
+;-value returns values
+;-state returns states which is the state that was before the function call, which is updated through boxes.
+(define interpret-funcall-value
+  (lambda (statement environment throw)
+    (call/cc
+      (lambda (return)
+        (interpret-statement-list (body (func-lookup (func-name statement) environment))
+                                  (add-binding
+                                   (param-list (func-lookup (func-name statement) environment))
+                                   (func-actual-param statement) environment
+                                   (push-frame (get-func-environment (func-name statement) environment)) throw)
+                                  (lambda (v) (return v)) 
+                                  (lambda (env) (myerror "Break used outside of loop"))
+                                  (lambda (env) (myerror "Continue used outside of loop"))
+                                  throw)))))
+
+(define interpret-funcall-state
+  (lambda (statement environment throw)
+    (call/cc
+      (lambda (return)
+        (if (null? (interpret-statement-list (body (func-lookup (func-name statement) environment))
+                                  (add-binding
+                                   (param-list (func-lookup (func-name statement) environment))
+                                   (func-actual-param statement) environment
+                                   (push-frame (get-func-environment (func-name statement) environment)) throw)
+                                  (lambda (v) (return environment)) 
+                                  (lambda (env) (myerror "Break used outside of loop"))
+                                  (lambda (env) (myerror "Continue used outside of loop"))
+                                  throw))
+            environment
+            environment)))))
+
 ; Evaluates all possible boolean and arithmetic expressions, including constants and variables. 
 (define eval-expression
   (lambda (expr environment throw)
     (cond
-      ;((null? expr) environment) ; enables use of return;
       ((number? expr) expr)
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
@@ -303,6 +290,12 @@
 (define get-try operand1)
 (define get-catch operand2)
 (define get-finally operand3)
+
+; these helper functions define function related statements
+(define cadr func-name)
+(define caddr func-arg-list)
+(define cadddr func-body)
+(define cddr func-actual-param)
 
 (define catch-var
   (lambda (catch-statement)
@@ -470,6 +463,16 @@
 ; Function portion of Environment functions
 ;------------------------------------------
 
+
+;Returns function environment, that is the environment viewed by function
+(define add-binding
+  (lambda (formal actual environment functionenvironment throw)
+    (cond
+      ((and (null? formal) (null? actual)) functionenvironment)
+      ((null? formal) myerror "Too many parameters for function")
+      ((null? actual) myerror "Not enough parameters for function")
+      (else (add-binding (cdr formal) (cdr actual) environment (insert (car formal) (eval-expression (car actual) environment throw) functionenvironment) throw)))))
+
 ; returns the environment specific to the given function
 
 (define get-func-environment
@@ -477,14 +480,6 @@
     (if (func-exists-in-list? func (functions (topframe environment)))
         environment
         (get-func-environment func (cdr environment)))))
-
-; returns the list of frames that are not used by the function
-
-(define get-nonpertinent-frames
-  (lambda (func environment)
-    (if (func-exists-in-list? func (functions (topframe environment)))
-        '()
-        (cons (topframe environment) (get-nonpertinent-frames func (cdr environment))))))
 
 ; does a function exist in the environment?
 (define func-exists?
@@ -575,12 +570,9 @@
     (car info)))
 
 ; returns the body of the function, stored as the raw parse tree statement list 
-
 (define body
   (lambda (info)
     (cadr info)))
-
-
 
 ; Because the error function is not defined in R5RS scheme, I create my own:
 (define error-break (lambda (v) v))
@@ -593,9 +585,3 @@
                             str
                             (makestr (string-append str (string-append " " (symbol->string (car vals)))) (cdr vals))))))
       (error-break (display (string-append str (makestr "" vals)))))))
-
-
-;check prints the parse tree to the console - for programmer informational purposes 
-(define check
-  (lambda (filename)
-    (parser filename)))
