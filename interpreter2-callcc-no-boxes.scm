@@ -1,19 +1,18 @@
 ; Tommy Lu/Vishal Patel/Jamie Flynn
 ; twl23/vsp20/gjf20
-; If you are using racket instead of scheme, uncomment these two lines, comment the (load "simpleParser.scm") and uncomment the (require "simpleParser.scm")
+; If you are using racket instead of scheme, uncomment these two lines, comment the (load "functionParser.scm") and uncomment the (require "functionParser.scm")
 ; #lang racket
  (require "functionParser.scm")
 ;(load "functionParser.scm")
 ;(require racket/trace)
 
-; An interpreter for the simple language that uses call/cc for the continuations.  Does not handle side effects.
+; An interpreter for the simple language that uses call/cc for the continuations.
 ;(define call/cc call-with-current-continuation)
-
 
 ; The functions that start interpret-...  all return the current environment.
 ; The functions that start eval-...  all return a value
-
-; The main function.  Calls parser to get the parse tree and interprets it with a new environment.  The returned value is in the environment.
+ 
+; The main function.  Calls parser to get the parse tree and interprets the main with an environment that is created from global variables and functions.
 (define interpret
   (lambda (file)
     (scheme->language
@@ -219,9 +218,8 @@
       ((not (list? expr)) (lookup expr environment))
       (else (eval-operator expr environment throw)))))
 
-; Evaluate a binary (or unary) operator.  Although this is not dealing with side effects, I have the routine evaluate the left operand first and then
-; pass the result to eval-binary-op2 to evaluate the right operand.  This forces the operands to be evaluated in the proper order in case you choose
-; to add side effects to the interpreter
+; Evaluate a binary (or unary) operator. I have the routine evaluate the left operand first and then
+; pass the result to eval-binary-op2 to evaluate the right operand.
 (define eval-operator
   (lambda (expr environment throw)
     (cond
@@ -229,7 +227,7 @@
       ((and (eq? '- (operator expr)) (= 2 (length expr))) (- (eval-expression (operand1 expr) environment throw)))
       (else (eval-binary-op2 expr (eval-expression (operand1 expr) environment throw) environment throw)))))
 
-; Complete the evaluation of the binary operator by evaluating the second operand and performing the operation. Also checks for functions TODO error check for functions without a return
+; Complete the evaluation of the binary operator by evaluating the second operand and performing the operation. Also checks for functions
 (define eval-binary-op2
   (lambda (expr op1value environment throw)
     (cond
@@ -311,10 +309,12 @@
   (lambda ()
     (list (newframe))))
 
-; create an empty frame: a frame is two lists, the first are the variables and the second is the "store" of values
+; create an empty frame: a frame is four lists
+; the format is ( (variable names) (variable values) (function names) (function values) ) where a function value is
+;( (function parameter names - we need these to add the params into the new environment layer) (the function body statement list) ) 
 (define newframe
   (lambda ()
-    '(() () () ()))) ; the format is ( (variable names) (variable values) (function names) (function values) ) where a function value is ( (function parameter names - we need these to add the params into the new environment layer) (the function body statement list) ) 
+    '(() () () ())))
 
 ; add a frame onto the top of the environment
 (define push-frame
