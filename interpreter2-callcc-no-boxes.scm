@@ -4,7 +4,7 @@
 ; #lang racket
  (require "functionParser.scm")
 ;(load "functionParser.scm")
-
+(require racket/trace)
 
 ; An interpreter for the simple language that uses call/cc for the continuations.  Does not handle side effects.
 ;(define call/cc call-with-current-continuation)
@@ -101,12 +101,14 @@
   (lambda (statement environment throw)
     (call/cc
       (lambda (return)
-        (interpret-statement-list (body (func-lookup (cadr statement) environment))
+        (if (null? (interpret-statement-list (body (func-lookup (cadr statement) environment))
                                   (add-binding (param-list (func-lookup (cadr statement) environment)) (cddr statement) environment (push-frame (get-func-environment (cadr statement) environment)) throw)
                                   (lambda (v) (return environment)) 
                                   (lambda (env) (myerror "Break used outside of loop"))
                                   (lambda (env) (myerror "Continue used outside of loop"))
-                                  throw)))))
+                                  throw))
+            environment
+            environment)))))
 ;Returns function environment, that is the environment viewed by function
 ;At the moment error checks for too little parameters, however too many it simply stops once it gets enough formal parameters defined TODO
 (define add-binding
@@ -136,6 +138,7 @@
     (update (get-assign-lhs statement) (eval-expression (get-assign-rhs statement) environment throw) environment)))
 
 ; We need to check if there is an else condition.  Otherwise, we evaluate the expression and do the right thing.
+
 (define interpret-if
   (lambda (statement environment return break continue throw)
     (cond
@@ -160,9 +163,9 @@
     (pop-frame (interpret-statement-list (cdr statement)
                                          (push-frame environment)
                                          return
-                                         (lambda (env) (break (pop-frame env)))
-                                         (lambda (env) (continue (pop-frame env)))
-                                         (lambda (v env) (throw v (pop-frame env)))))))
+                                         (lambda (env) (break environment))
+                                         (lambda (env) (continue environment))
+                                         (lambda (v env) (throw v environment))))))
 
 ; We use a continuation to throw the proper value. Because we are not using boxes, the environment/state must be thrown as well so any environment changes will be kept
 (define interpret-throw
@@ -184,8 +187,8 @@
                                                  (get-body catch-statement) 
                                                  (insert (catch-var catch-statement) ex environment)
                                                  return 
-                                                 (lambda (env2) (break (pop-frame env2))) 
-                                                 (lambda (env2) (continue (pop-frame env2))) 
+                                                 (lambda (env2) (break environment)) 
+                                                 (lambda (env2) (continue environment)) 
                                                  (lambda (v env2) (throw v environment)))
                                      return break continue throw)))))))
 
