@@ -1,19 +1,18 @@
 ; Tommy Lu/Vishal Patel/Jamie Flynn
 ; twl23/vsp20/gjf20
-; If you are using racket instead of scheme, uncomment these two lines, comment the (load "simpleParser.scm") and uncomment the (require "simpleParser.scm")
+; If you are using racket instead of scheme, uncomment these two lines, comment the (load "functionParser.scm") and uncomment the (require "functionParser.scm")
 ; #lang racket
- (require "functionParser.scm")
-;(load "functionParser.scm")
-
+ (require "classParser.scm")
+;(load "classParser.scm")
+;(require racket/trace)
 
 ; An interpreter for the simple language that uses call/cc for the continuations.
 ;(define call/cc call-with-current-continuation)
 
-
 ; The functions that start interpret-...  all return the current environment.
 ; The functions that start eval-...  all return a value
-
-; The main function.  Calls parser to get the parse tree and interprets it with a new environment.
+ 
+; The main function.  Calls parser to get the parse tree and interprets the main with an environment that is created from global variables and functions.
 (define interpret
   (lambda (file)
     (scheme->language
@@ -25,7 +24,6 @@
                                   (lambda (env) (myerror "Break used outside of loop"))
                                   (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown"))))))))
-;uses cdr (lookup 'main) because body defined does cadr, which is the bodylist like so ((var x) (var y)), whereas we need (((var x) (var y)))
 
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
 (define interpret-statement-list-raw
@@ -55,7 +53,7 @@
 (define interpret-statement
   (lambda (statement environment return break continue throw)
     (cond
-      ((eq? 'return (statement-type statement)) (interpret-return statement environment return break continue throw)) ;todo we can insert a (cons env ("rest of line... interpret-blah" because the interpret-blah still gives us the value 
+      ((eq? 'return (statement-type statement)) (interpret-return statement environment return break continue throw))
       ((eq? 'var (statement-type statement)) (interpret-declare statement environment throw))
       ((eq? '= (statement-type statement)) (interpret-assign statement environment throw))
       ((eq? 'if (statement-type statement)) (interpret-if statement environment return break continue throw))
@@ -66,55 +64,8 @@
       ((eq? 'throw (statement-type statement)) (interpret-throw statement environment throw))
       ((eq? 'try (statement-type statement)) (interpret-try statement environment return break continue throw))
       ((eq? 'function (statement-type statement)) (interpret-function statement environment))
-      ((eq? 'funcall (statement-type statement)) (interpret-funcall-state statement environment throw));; todo if we put the code to reappend the other frames in this function, it should work,  we can also slip in our processing of the ((env) (return val)) tuple
+      ((eq? 'funcall (statement-type statement)) (interpret-funcall-state statement environment throw))
       (else (myerror "Unknown statement:" (statement-type statement))))))
-
-
-;Currently only works with main - the idea is it evaluates the body of statement using an environment/state that has been updated with the argument list
-;3/31/18
-;for other functions need a different call/cc return or some sort.
-;car of statement is function
-;cadr of statement is name of function
-;cadddr of statement is the body of function
-;caddr of statement is the argument list
-(define interpret-function
-  (lambda (statement environment)
-    (insert-func (cadr statement) (list (caddr statement) (cadddr statement)) environment)))
-
-
-;function comes with two parathesised lines, that is (arg list) (body)
-;(add-bindiing (caddr get-value (cadr statement)) (caddr statement (push-frame environment)) sets up the function by passing the actual parameters to formal and creating a function scope
-(define interpret-funcall-value
-  (lambda (statement environment throw)
-    (call/cc
-      (lambda (return)
-        (interpret-statement-list (body (func-lookup (cadr statement) environment))
-                                  (add-binding (param-list (func-lookup (cadr statement) environment)) (cddr statement) environment (push-frame (get-func-environment (cadr statement) environment)) throw)
-                                  (lambda (v) (return v)) 
-                                  (lambda (env) (myerror "Break used outside of loop"))
-                                  (lambda (env) (myerror "Continue used outside of loop"))
-                                  throw)))))
-
-(define interpret-funcall-state
-  (lambda (statement environment throw)
-    (call/cc
-      (lambda (return)
-        (interpret-statement-list (body (func-lookup (cadr statement) environment))
-                                  (add-binding (param-list (func-lookup (cadr statement) environment)) (cddr statement) environment (push-frame (get-func-environment (cadr statement) environment)) throw)
-                                  (lambda (v) (return environment)) 
-                                  (lambda (env) (myerror "Break used outside of loop"))
-                                  (lambda (env) (myerror "Continue used outside of loop"))
-                                  throw)))))
-
-;Returns function environment, that is the environment viewed by function
-
-(define add-binding
-  (lambda (formal actual environment functionenvironment throw)
-    (cond
-      ((and (null? formal) (null? actual)) functionenvironment)
-      ((null? formal) myerror "Too many parameters for function")
-      ((null? actual) myerror "Not enough parameters for function")
-      (else (add-binding (cdr formal) (cdr actual) environment (insert (car formal) (eval-expression (car actual) environment throw) functionenvironment) throw)))))
 
 
 ; Calls the return continuation with the given expression value
@@ -135,6 +86,7 @@
     (update (get-assign-lhs statement) (eval-expression (get-assign-rhs statement) environment throw) environment)))
 
 ; We need to check if there is an else condition.  Otherwise, we evaluate the expression and do the right thing.
+
 (define interpret-if
   (lambda (statement environment return break continue throw)
     (cond
@@ -183,8 +135,8 @@
                                                  (get-body catch-statement) 
                                                  (insert (catch-var catch-statement) ex environment)
                                                  return 
-                                                 (lambda (env2) (break (pop-frame env2))) 
-                                                 (lambda (env2) (continue (pop-frame env2))) 
+                                                 (lambda (env2) (break environment)) 
+                                                 (lambda (env2) (continue environment)) 
                                                  (lambda (v env2) (throw v environment)))
                                      return break continue throw)))))))
 
@@ -216,11 +168,49 @@
       ((not (eq? (statement-type finally-statement) 'finally)) (myerror "Incorrectly formatted finally block"))
       (else (cons 'begin (cadr finally-statement))))))
 
+;Inserts function into current frame to be called
+(define interpret-function
+  (lambda (statement environment)
+    (insert-func (func-name statement) (list (func-arg-list statement) (func-body statement)) environment)))
+
+
+;Sets up the function by passing the actual parameters to formal and creating a function scope.
+;-value returns values
+;-state returns states which is the state that was before the function call, which is updated through boxes.
+(define interpret-funcall-value
+  (lambda (statement environment throw)
+    (call/cc
+      (lambda (return)
+        (interpret-statement-list (body (func-lookup (func-name statement) environment))
+                                  (add-binding
+                                   (param-list (func-lookup (func-name statement) environment))
+                                   (func-actual-param statement) environment
+                                   (push-frame (get-func-environment (func-name statement) environment)) throw)
+                                  (lambda (v) (return v)) 
+                                  (lambda (env) (myerror "Break used outside of loop"))
+                                  (lambda (env) (myerror "Continue used outside of loop"))
+                                  throw)))))
+
+(define interpret-funcall-state
+  (lambda (statement environment throw)
+    (call/cc
+      (lambda (return)
+        (if (null? (interpret-statement-list (body (func-lookup (func-name statement) environment))
+                                  (add-binding
+                                   (param-list (func-lookup (func-name statement) environment))
+                                   (func-actual-param statement) environment
+                                   (push-frame (get-func-environment (func-name statement) environment)) throw)
+                                  (lambda (v) (return environment)) 
+                                  (lambda (env) (myerror "Break used outside of loop"))
+                                  (lambda (env) (myerror "Continue used outside of loop"))
+                                  throw))
+            environment
+            environment)))))
+
 ; Evaluates all possible boolean and arithmetic expressions, including constants and variables. 
 (define eval-expression
   (lambda (expr environment throw)
     (cond
-      ;((null? expr) environment) ; enables use of return;
       ((number? expr) expr)
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
@@ -228,9 +218,8 @@
       ((not (list? expr)) (lookup expr environment))
       (else (eval-operator expr environment throw)))))
 
-; Evaluate a binary (or unary) operator.  Although this is not dealing with side effects, I have the routine evaluate the left operand first and then
-; pass the result to eval-binary-op2 to evaluate the right operand.  This forces the operands to be evaluated in the proper order in case you choose
-; to add side effects to the interpreter
+; Evaluate a binary (or unary) operator. I have the routine evaluate the left operand first and then
+; pass the result to eval-binary-op2 to evaluate the right operand.
 (define eval-operator
   (lambda (expr environment throw)
     (cond
@@ -238,7 +227,7 @@
       ((and (eq? '- (operator expr)) (= 2 (length expr))) (- (eval-expression (operand1 expr) environment throw)))
       (else (eval-binary-op2 expr (eval-expression (operand1 expr) environment throw) environment throw)))))
 
-; Complete the evaluation of the binary operator by evaluating the second operand and performing the operation. Also checks for functions TODO error check for functions without a return
+; Complete the evaluation of the binary operator by evaluating the second operand and performing the operation. Also checks for functions
 (define eval-binary-op2
   (lambda (expr op1value environment throw)
     (cond
@@ -300,6 +289,12 @@
 (define get-catch operand2)
 (define get-finally operand3)
 
+; these helper functions define function related statements
+(define func-name cadr)
+(define func-arg-list caddr)
+(define func-body cadddr)
+(define func-actual-param cddr)
+
 (define catch-var
   (lambda (catch-statement)
     (car (operand1 catch-statement))))
@@ -314,10 +309,12 @@
   (lambda ()
     (list (newframe))))
 
-; create an empty frame: a frame is two lists, the first are the variables and the second is the "store" of values
+; create an empty frame: a frame is four lists
+; the format is ( (variable names) (variable values) (function names) (function values) ) where a function value is
+;( (function parameter names - we need these to add the params into the new environment layer) (the function body statement list) ) 
 (define newframe
   (lambda ()
-    '(() () () ()))) ; the format is ( (variable names) (variable values) (function names) (function-info) ) where a function-info is ( (function parameter names) (the function body statement list) ) 
+    '(() () () ())))
 
 ; add a frame onto the top of the environment
 (define push-frame
@@ -466,6 +463,16 @@
 ; Function portion of Environment functions
 ;------------------------------------------
 
+
+;Returns function environment, that is the environment viewed by function
+(define add-binding
+  (lambda (formal actual environment functionenvironment throw)
+    (cond
+      ((and (null? formal) (null? actual)) functionenvironment)
+      ((null? formal) myerror "Too many parameters for function")
+      ((null? actual) myerror "Not enough parameters for function")
+      (else (add-binding (cdr formal) (cdr actual) environment (insert (car formal) (eval-expression (car actual) environment throw) functionenvironment) throw)))))
+
 ; returns the environment specific to the given function
 
 (define get-func-environment
@@ -473,14 +480,6 @@
     (if (func-exists-in-list? func (functions (topframe environment)))
         environment
         (get-func-environment func (cdr environment)))))
-
-; returns the list of frames that are not used by the function
-
-(define get-nonpertinent-frames
-  (lambda (func environment)
-    (if (func-exists-in-list? func (functions (topframe environment)))
-        '()
-        (cons (topframe environment) (get-nonpertinent-frames func (cdr environment))))))
 
 ; does a function exist in the environment?
 (define func-exists?
@@ -571,12 +570,9 @@
     (car info)))
 
 ; returns the body of the function, stored as the raw parse tree statement list 
-
 (define body
   (lambda (info)
     (cadr info)))
-
-
 
 ; Because the error function is not defined in R5RS scheme, I create my own:
 (define error-break (lambda (v) v))
@@ -589,9 +585,3 @@
                             str
                             (makestr (string-append str (string-append " " (symbol->string (car vals)))) (cdr vals))))))
       (error-break (display (string-append str (makestr "" vals)))))))
-
-
-;check prints the parse tree to the console - for programmer informational purposes 
-(define check
-  (lambda (filename)
-    (parser filename)))
