@@ -310,11 +310,11 @@
     (list (newframe))))
 
 ; create an empty frame: a frame is four lists
-; the format is ( (variable names) (variable values) (function names) (function values) ) where a function value is
+; the format is ( (variable names) (variable values) (function names) (function values) (class names) (class closures) ) where a function value is
 ;( (function parameter names - we need these to add the params into the new environment layer) (the function body statement list) ) 
 (define newframe
   (lambda ()
-    '(() () () ())))
+    '(() () () () () ())))
 
 ; add a frame onto the top of the environment
 (define push-frame
@@ -573,6 +573,61 @@
 (define body
   (lambda (info)
     (cadr info)))
+
+;------------- MARK--------
+;   Class Closure Methods
+;--------------------------
+
+;makes a class closure
+
+
+
+;getter functions
+;----------------
+
+(define class_closure_parent_class car)
+(define class_closure_instance_field_list cadr)
+(define class_closure_method_values_list caddr)
+(define class_closure_method_closures_list cadddr)
+
+(define class_closure_add_fields ;takes a list of arguments and a class name - returns the list of argument appended with the instance_field_list of the super classes
+  (lambda (arglist class)
+    (cond
+      ((null? class) '())
+      (else (class_closure_add_fields (append list (class_closure_instance_field_list (lookup_class_closure class)) (class_closure_parent_class (lookup_class_closure class))))))))
+
+(define class_closure_get_index ;takes a class closure and a field name and returns the index of the field (distance from end of list)
+  (lambda (clos field)
+    (get_index (class_closure_instance_field_list clos) field)))
+
+(define get_index ;takes an instance field list and a field name and returns the index of the field (distance from end of list)
+  (lambda (lis name)
+    (cond
+      ((null? lis) myerror"error: field not in field list")
+      ((eq? (car lis) name) (count_to_end (cdr lis) 0))
+      (else (get_index (cdr lis) field)))))
+
+(define count_to_end ;takes a list and continueation and returns the list's length
+  (lambda (lis continue)
+    (cond
+      ((null? lis) continue)
+      (else (count_to_end (cdr lis) (+ 1 continue))))))
+
+;------------- MARK--------
+; Instance Closure Methods
+;--------------------------
+
+;make an instance closure
+
+
+;getter functions
+;------------------
+
+
+;------------------------
+;    System Helpers
+;------------------------
+
 
 ; Because the error function is not defined in R5RS scheme, I create my own:
 (define error-break (lambda (v) v))
