@@ -20,7 +20,7 @@
       (lambda (return)
         (interpret-statement-list (body (func-lookup 'main (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown")))))
                                   (push-frame (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))
-                                  (lambda (v ) (return v))
+                                  (lambda (v) (return v))
                                   (lambda (env) (myerror "Break used outside of loop"))
                                   (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown"))))))))
@@ -489,6 +489,7 @@
       ((func-exists-in-list? func (functions (topframe environment))) #t)
       (else (func-exists? func (remainingframes environment))))))
 
+
 ; does a function exist in a list?
 (define func-exists-in-list?
   (lambda (func l)
@@ -549,10 +550,9 @@
         (cons (add-func-to-frame func info (car environment)) (cdr environment)))))
 
 ; Add a new variable/value pair to the frame.
-
 (define add-func-to-frame
   (lambda (func info frame)
-    (list (variables frame) (store frame) (cons func (functions frame)) (cons info (func-info frame)))))
+    (list (variables frame) (store frame) (cons func (functions frame)) (cons info (func-info frame)) (envframe_class_name_list frame) (envframe_class_closure_list frame))))
 
 ; returns the list of functions from a frame
 (define functions
@@ -574,9 +574,76 @@
   (lambda (info)
     (cadr info)))
 
+;----------------MARK---------------------
+; Class portion of Environment functions
+;------------------------------------------
+
+(define envframe_class_name_list ;caddddr
+  (lambda (lis)
+    (cadr (cdddr lis))))
+
+(define envframe_class_closure_list ; cadddddr
+  (lambda (lis)
+    (caddr (cdddr lis))))
+
+;need a get closure func given name and  -> list is empty? error, name match? return the closure, otherwise pass cdr's and recur
+(define lookup_class_closure ;returns the closure of a class given the environment and the class name
+  (lambda (env name)
+    (cond
+      ((null? env) (myerror "class is not in current environment"))
+      ((is_in_frame? name (topframe env)) (lookup_class_in_frame name (topframe env)))
+      (else (lookup_class_closure (popframe env) name)))))
+
+;returns #t if the class name is in the frame
+(define is_in_frame?
+  (lambda (class frame)
+    (cond
+      ((null? frame) #f)
+      (else (is_in_list? class (envframe_class_name_list frame))))))
+    
+;returns #t if the class name is in the list of class names
+(define is_in_list?
+  (lambda (class lis)
+    (cond
+      ((null? lis) #f)
+      ((eq? (car lis) class) #t)
+      (else (is_in_list? class (cdr lis))))))
+
+;returns the class closure in the frame corresponding to the passed class name
+(define lookup_class_in_frame
+  (lambda (class frame)
+    (cond
+      (lookup_closure name () ()))))
+
+;returns the closure in closlist associated with name
+(define lookup_closure
+  (lambda (name namelist closlist)
+    (cond
+      ((and (null? namelist) (null? closlist)) (myerror "class not in provided namelist" namelist))
+      ((null? namelist) (myerror "mismatch number of names to closures: not enough names. Remaining closures: " closlist))
+      ((null? closlist) (myerror "mismatch number of names to closures: not enough closures. Remaining names: " namelist))
+      ((eq? name (car namelist)) (car closlist))
+      (else (lookup_closure name (cdr namelist) (cdr closlist))))))
+
+;add a class name/closure binding to the environment
+(define add_class_binding
+  (lambda (name closure env)
+    (cond
+      ((null? env) (myerror "Received null environment when adding class binding"))
+      ((is_in_frame name (topframe env)) (myerror "class already in top frame of the environment")); allows for same name classes at different scope levels
+      (else (cons (add_class_binding_to_frame name closure (topframe env)) (cdr env))))))
+
+(define add_class_binding_to_frame ;takes a class name and closure and the environment frame - returns the frame with the class binding added
+  (lambda (name closure frame)
+    ((null? frame) (myerror "Recieved null frame when adding class binding"))
+    (else (list ((variables frame) (store frame) (functions frame) (func-info frame) (cons name (envframe_class_name_list frame)() (cons closure (envframe_class_closure_list frame))))))))
+
+
 ;------------- MARK--------
 ;   Class Closure Methods
 ;--------------------------
+
+;class closure format: ('parent_class (instance field names) (class method names) (class method closures))
 
 ;makes a class closure
 
@@ -587,7 +654,7 @@
 
 (define class_closure_parent_class car)
 (define class_closure_instance_field_list cadr)
-(define class_closure_method_values_list caddr)
+(define class_closure_method_names_list caddr)
 (define class_closure_method_closures_list cadddr)
 
 (define class_closure_add_fields ;takes a list of arguments and a class name - returns the list of argument appended with the instance_field_list of the super classes
@@ -605,7 +672,7 @@
     (cond
       ((null? lis) myerror"error: field not in field list")
       ((eq? (car lis) name) (count_to_end (cdr lis) 0))
-      (else (get_index (cdr lis) field)))))
+      (else (get_index (cdr lis) name)))))
 
 (define count_to_end ;takes a list and continueation and returns the list's length
   (lambda (lis continue)
@@ -617,11 +684,16 @@
 ; Instance Closure Methods
 ;--------------------------
 
+;the instance closure looks like: ('runtime_type (instance values))
+
 ;make an instance closure
+
 
 
 ;getter functions
 ;------------------
+(define instance_closure_runtime_type car)
+(define instance_closure_instance_values_list cadr)
 
 
 ;------------------------
