@@ -310,11 +310,10 @@
     (list (newframe))))
 
 ; create an empty frame: a frame is four lists
-; the format is ( (variable names) (variable values) (function names) (function values) (class names) (class closures) ) where a function value is
-;( (function parameter names - we need these to add the params into the new environment layer) (the function body statement list) ) 
+; the format is ( (variable names) (variable values) (class names) (class closures) )
 (define newframe
   (lambda ()
-    '(() () () () () ())))
+    '(() () () ())))
 
 ; add a frame onto the top of the environment
 (define push-frame
@@ -481,52 +480,87 @@
         environment
         (get-func-environment func (cdr environment)))))
 
-; does a function exist in the environment?
-(define func-exists?
-  (lambda (func environment)
+; does a method exist in some class in the environment?
+(define method_exists?
+  (lambda (method environment)
     (cond
       ((null? environment) #f)
-      ((func-exists-in-list? func (functions (topframe environment))) #t)
-      (else (func-exists? func (remainingframes environment))))))
+      ((method_exists_in_frame? method (topframe environment)) #t)
+      (else (method_exists? method (remainingframes environment))))))
+
+; returns true if the method exists in a class in the frame
+(define method_exists_in_frame?
+  (lambda (method frame)
+    (cond
+      ((null? frame) (myerror "expected a frame, got null when checking if method is in frame"))
+      (else (method_exists_in_closures? method (envframe_class_closure_list frame))))))
+
+;returns true if the method exists in a class closure in the list of class closures
+(define method_exists_in_closures?
+  (lambda (method class_closure_list)
+    (cond
+      ((null? class_closure_list) #f)
+      ((method_exists_in_list? method (class_closure_method_names_list (car class_closure_list))) #t)
+      (else (method_exists_in_closures? method (cdr class_closure_list))))))
 
 
-; does a function exist in a list?
-(define func-exists-in-list?
-  (lambda (func l)
+; does a method exist in a list?
+(define method_exists_in_list?
+  (lambda (method l)
     (cond
       ((null? l) #f)
-      ((eq? func (car l)) #t)
-      (else (func-exists-in-list? func (cdr l))))))
+      ((eq? method (car l)) #t)
+      (else (method_exists_in_list? method (cdr l))))))
 
-; Looks up function info in the environment.
-(define func-lookup
-  (lambda (func environment)
-    (lookup-function func environment)))
+; Looks up method info in the environment.
+(define method_lookup
+  (lambda (method environment)
+    (cond
+      ((null? environment) (myerror "error: tried to lookup method in null environment"))
+      (else (lookup_method method environment)))))
   
 ; A helper function that does the lookup.  Returns an error if the function does not have info associated with it
-(define lookup-function
-  (lambda (func environment)
-    (let ((info (lookup-func-in-env func environment)))
+(define lookup_method
+  (lambda (method environment)
+    (let ((info (lookup_method_in_env method environment)))
       (if (null? info)
-          (myerror "error: function without parameters or body:" func) ;this may be a source of error (possible debug point)
+          (myerror "error: method without parameters or body:" method) ;this may be a source of error (possible debug point)
           info))))
 
-; Return the info bound to a function in the environment
-(define lookup-func-in-env
-  (lambda (func environment)
+; Return the info bound to a method in the environment
+(define lookup_method_in_env
+  (lambda (method environment)
     (cond
-      ((null? environment) (myerror "error: undefined function" func))
-      ((func-exists-in-list? func (functions (topframe environment))) (lookup-func-in-frame func (topframe environment)))
-      (else (lookup-func-in-env func (cdr environment))))))
+      ((null? environment) (myerror "error: undefined function" method))
+      ((method_exists_in_frame? method (topframe environment)) (lookup_method_in_frame method (topframe environment)))
+      (else (lookup_method_in_env method (cdr environment))))))
 
-; Return the info bound to a function in the frame
-(define lookup-func-in-frame
-  (lambda (func frame)
+; Return the info bound to a method in the frame
+(define lookup_method_in_frame
+  (lambda (method frame)
     (cond
-      ((not (func-exists-in-list? func (functions frame))) (myerror "error: undefined function" func))
-      (else (get-info (indexof-func func (functions frame)) (func-info frame))))))
+      ((not (method_exists_in_closures? method (envframe_class_closures_list frame))) (myerror "error: undefined function" func))
+      (else (lookup_method_in_closures method (envframe_class_closures_list frame))))))
 
-; Get the location of a function name in a list of names
+;return the info bound to a method name(input) from the list of class closures(input)
+(define lookup_method_in_closures
+  (lambda (method class_closures)
+    (cond
+      ((null? class_class closures) (myerror "Method not found in any class closures"))
+      ((method_exists_in_list? method (class_closure_method_names_list (car class_closures))) (get_method_info method (class_closure_method_names_list (car class_closures)) (class_closure_method_closures_list (car class_closures))))
+      (else (lookup_method_in_closures method (cdr class_closures))))))
+
+;takes in the method name list and the method closure list, returns the info(method closure) bound to the method name 
+(define get_method_info
+  (lambda (method nameslist closurelist)
+    (cond
+      ((and (null? nameslist) (null? closurelist)) (myerror "Undeclared method: " method))
+      ((null? nameslist) (myerror "Mismatch of method names to closures: too many closures, remaining closures: " closurelist))
+      ((null? closurelist) (myerror "Mismatch of method names to closures: too many names, remaining names " namelist))
+      ((eq? method (car nameslist)) (car closurelist))
+      (else get_method_info method (cdr nameslist) (cdr closurelist)))))
+
+; Get the location of a function name in a list of names  ;************ MAY BE VESTIGIAL
 (define indexof-func
   (lambda (func l)
     (cond
@@ -534,32 +568,49 @@
       ((eq? func (car l)) 0)
       (else (+ 1 (indexof-func func (cdr l)))))))
 
-; Get the function info stored at a given index in the list
+; Get the function info stored at a given index in the list ;************ MAY BE VESTIGIAL
 (define get-info
   (lambda (n l)
     (cond
       ((zero? n) (car l))
       (else (get-info (- n 1) (cdr l))))))
 
-; Adds a new function/function-info binding pair into the environment.  Gives an error if the function already exists in this frame.
+;adds a new method/method-info(closure) binding pair into the class closure in an environment (returns the environment)
+(define insert_method
+  (lambda (method info class env)
+    (cond
+      ((null? env) (myerror "Following class does not exist in the environment: " class))
+      ((is_in_frame? class (topframe env)) (cons (update_frame_class_closure_list (add_method_to_closure_in_list method info class (envframe_class_names_list (topframe env)) (envframe_class_closure_list (topframe env))) (topframe env)) (cdr env)))
+      (else (cons (topframe env)(insert_method method info class (cdr env)))))))
 
-(define insert-func
-  (lambda (func info environment)
-    (if (func-exists-in-list? func (functions (car environment)))
-        (myerror "error: function is being re-declared:" func)
-        (cons (add-func-to-frame func info (car environment)) (cdr environment)))))
+;replace the class closure list in a frame with the passed in list
+(define update_frame_class_closure_list
+  (lambda (newlist frame)
+    (list (variables frame) (store frame) (envframe_class_name_list) newlist)))
 
-; Add a new variable/value pair to the frame.
-(define add-func-to-frame
-  (lambda (func info frame)
-    (list (variables frame) (store frame) (cons func (functions frame)) (cons info (func-info frame)) (envframe_class_name_list frame) (envframe_class_closure_list frame))))
 
-; returns the list of functions from a frame
+; Add a new method/method-info pair to the frame. - returns an updated closure list
+(define add_method_to_closure_in_list
+  (lambda (method info class classnames classclosures)
+    (cond
+      ((and (null? classnames) (null? classclosures)) (myerror "Class not found in classname list"))
+      ((eq? class (car classnames)) (cons (add_method_to_closure method info (car classclosures)) (cdr classclosures)))
+      (else (add_method_to_closure_in_list method info class (cdr classnames) (cdr classclosures))))))
+
+; Adds a new method/method-info(closure) binding pair into the class closure.  Gives an error if the method already exists in this class.
+; returns the class closure updated with the new method binding
+(define add_method_to_closure
+  (lambda (method info class_closure)
+    (if (method_exists_in_list? method (class_closure_method_names_list class_closure))
+        (myerror "error: method is being re-declared: " method)
+        (list (class_closure_parent_class class_closure) (class_closure_instance_fields class_closure) (class_closure_method_names_list class_closure) (class_closure_method_closures_list class_closure)))))
+    
+; returns the list of functions from a frame ; ********* deprecated
 (define functions
   (lambda (frame)
     (caddr frame)))
 
-; returns the function info from a frame
+; returns the function info(closure) from a frame ;******* deprecated
 (define func-info
   (lambda (frame)
     (car (cdddr frame))))
@@ -578,13 +629,13 @@
 ; Class portion of Environment functions
 ;------------------------------------------
 
-(define envframe_class_name_list ;caddddr
+(define envframe_class_name_list ;caddr
   (lambda (lis)
-    (cadr (cdddr lis))))
+    (cadr (cdr lis))))
 
-(define envframe_class_closure_list ; cadddddr
+(define envframe_class_closure_list ; cadddr
   (lambda (lis)
-    (caddr (cdddr lis))))
+    (caddr (cdr lis))))
 
 ;need a get closure func given name and  -> list is empty? error, name match? return the closure, otherwise pass cdr's and recur
 (define lookup_class_closure ;returns the closure of a class given the environment and the class name
@@ -612,10 +663,9 @@
 ;returns the class closure in the frame corresponding to the passed class name
 (define lookup_class_in_frame
   (lambda (class frame)
-    (cond
-      (lookup_closure name () ()))))
+      (lookup_closure class (envframe_class_name_list) (envframe_class_closure_list))))
 
-;returns the closure in closlist associated with name
+;returns the class closure in closlist associated with name
 (define lookup_closure
   (lambda (name namelist closlist)
     (cond
