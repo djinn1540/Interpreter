@@ -18,7 +18,7 @@
     (scheme->language
      (call/cc
       (lambda (return)
-        (interpret-statement-list (body (method_lookup 'main (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown")))))
+        (interpret-statement-list (body (func-lookup 'main (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown")))))
                                   (push-frame (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))
                                   (lambda (v) (return v))
                                   (lambda (env) (myerror "Break used outside of loop"))
@@ -35,18 +35,6 @@
 ; interpret a statement in the environment with continuations for return, break, continue, throw
 (define interpret-statement-raw
   (lambda (statement environment throw)
-    (cond
-      ((eq? 'class (statement-type statement)) (interpret_class_statment_list (classname statement) statement environment throw)) ;todo this needs to be ironed out
-      (else (myerror "Illegal Statement:" (statement-type statement))))))
-
-(define interpret_class_statement_list
-  (lambda (classname statement-list environment throw)
-    (if (null? statement-list)
-        environment
-        (interpret_class_statement classname (cdr statement-list) (interpret-statement-raw (car statement-list) environment throw) throw))))
-
-(define interpret_class_statement ;this should just be interpreter part 3 TODO:pass in the class along
-  (lambda (classname statement environment throw)
     (cond
       ((eq? 'var (statement-type statement)) (interpret-declare statement environment throw))
       ((eq? '= (statement-type statement)) (interpret-assign statement environment))
@@ -183,7 +171,7 @@
 ;Inserts function into current frame to be called
 (define interpret-function
   (lambda (statement environment)
-    (insert_method (func-name statement) (list (func-arg-list statement) (func-body statement)) environment)))
+    (insert-func (func-name statement) (list (func-arg-list statement) (func-body statement)) environment)))
 
 
 ;Sets up the function by passing the actual parameters to formal and creating a function scope.
@@ -193,9 +181,9 @@
   (lambda (statement environment throw)
     (call/cc
       (lambda (return)
-        (interpret-statement-list (body (method_lookup (func-name statement) environment))
+        (interpret-statement-list (body (func-lookup (func-name statement) environment))
                                   (add-binding
-                                   (param-list (method_lookup (func-name statement) environment))
+                                   (param-list (func-lookup (func-name statement) environment))
                                    (func-actual-param statement) environment
                                    (push-frame (get-func-environment (func-name statement) environment)) throw)
                                   (lambda (v) (return v)) 
@@ -207,9 +195,9 @@
   (lambda (statement environment throw)
     (call/cc
       (lambda (return)
-        (if (null? (interpret-statement-list (body (method_lookup (func-name statement) environment))
+        (if (null? (interpret-statement-list (body (func-lookup (func-name statement) environment))
                                   (add-binding
-                                   (param-list (method_lookup (func-name statement) environment))
+                                   (param-list (func-lookup (func-name statement) environment))
                                    (func-actual-param statement) environment
                                    (push-frame (get-func-environment (func-name statement) environment)) throw)
                                   (lambda (v) (return environment)) 
@@ -218,24 +206,6 @@
                                   throw))
             environment
             environment)))))
-
-;----------------------
-;class statement helpers
-;
-(define classname cdr)
-(define ancestry cddr)
-(define classbody cdddr)
-
-
-
-;end class statement helpers
-;---------------------
-(define interpret-class
-  (lambda (statement env throw)
-    (cond
-      ((or (null? (classname statement)) (null? (ancestry statement)) (null? (classbody statement))) (myerror "class definition missing arguments"))
-      (else (add_class_binding (classname statement) (make_closure (car (classname statement)) (car (ancestry statement)) (car (classbody statement))) env)))))
-                                                                                                    
 
 ; Evaluates all possible boolean and arithmetic expressions, including constants and variables. 
 (define eval-expression
@@ -724,16 +694,9 @@
 ;--------------------------
 
 ;class closure format: ('parent_class (instance field names) (class method names) (class method closures))
-(define newclassclosure
-  (lambda (parentClass)
-    (list parentClass () () ()))) ; todo - make this insert the parent fields and methods into the field and method lists
 
-;makes a class closure - returns the env with the new class definition inserted
-(define make_class_closure
-  (lambda (name ancestrylist body env) ; body is a statement list, now we need to interpret body like part 3 (copy and paste it todo)
-    (cond
-      ((null? ancestrylist) (interpreterpt3 body class*this is new and needs to be passed along* (add_class_binding name (newclassclosure '()) env) )); the default parent class
-      ((
+;makes a class closure
+
 
 
 ;getter functions
