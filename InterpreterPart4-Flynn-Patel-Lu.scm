@@ -85,7 +85,6 @@
       ((eq? 'function (statement-type statement)) (interpret-function statement environment))
       ((eq? 'static-function (statement-type statement)) (interpret-function statement environment))
       ((eq? 'funcall (statement-type statement)) (interpret-funcall-state statement environment throw))
-      ((eq? 'dot (statement-type statement)) (interpret-funcall statement environment throw)) ;placeholder TODO
       (else (myerror "Unknown statement:" (statement-type statement))))))
 
 
@@ -237,6 +236,7 @@
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
       ((and (list? expr) (eq? 'funcall (operator expr))) (interpret-funcall-value expr environment throw))
+      ((and (list? expr) (eq? 'dot (operator expr)) (eq? 'this (cadr expr))) (lookup (caddr expr) environment))
       ((and (list? expr) (eq? 'dot (operator expr))) (lookup (caddr expr) (lookup (cadr expr) environment)))
       ((not (list? expr)) (lookup expr environment))
       (else (eval-operator expr environment throw)))))
@@ -500,9 +500,10 @@
 
 (define get-func-environment
   (lambda (func environment)
-    (if (func-exists-in-list? func (functions (topframe environment)))
-        environment
-        (get-func-environment func (cdr environment)))))
+    (cond
+      ((and (list? func) (eq? 'dot (car func))) (get-func-environment (caddr func) (lookup (cadr func) environment)))
+      ((func-exists-in-list? func (functions (topframe environment))) environment)
+      (else (get-func-environment func (cdr environment))))))
 
 ; does a function exist in the environment?
 (define func-exists?
@@ -524,7 +525,9 @@
 ; Looks up function info in the environment.
 (define func-lookup
   (lambda (func environment)
-    (lookup-function func environment)))
+    (cond
+      ((and (list? func) (eq? 'dot (car func))) (lookup-function (caddr func) (lookup (cadr func) environment)))
+      (else (lookup-function func environment)))))
   
 ; A helper function that does the lookup.  Returns an error if the function does not have info associated with it
 (define lookup-function
