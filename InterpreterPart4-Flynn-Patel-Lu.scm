@@ -236,7 +236,6 @@
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
       ((and (list? expr) (eq? 'funcall (operator expr))) (interpret-funcall-value expr environment throw))
-      ((and (list? expr) (eq? 'dot (operator expr)) (eq? 'this (cadr expr))) (lookup (caddr expr) environment))
       ((and (list? expr) (eq? 'dot (operator expr))) (lookup (caddr expr) (lookup (cadr expr) environment)))
       ((not (list? expr)) (lookup expr environment))
       (else (eval-operator expr environment throw)))))
@@ -491,7 +490,7 @@
 (define add-binding
   (lambda (formal actual environment functionenvironment throw)
     (cond
-      ((and (null? formal) (null? actual)) functionenvironment)
+      ((and (null? formal) (null? actual)) (insert 'this (cdr functionenvironment) functionenvironment))
       ((null? formal) myerror "Too many parameters for function")
       ((null? actual) myerror "Not enough parameters for function")
       (else (add-binding (cdr formal) (cdr actual) environment (insert (car formal) (eval-expression (car actual) environment throw) functionenvironment) throw)))))
@@ -658,7 +657,7 @@
   (lambda (name closure env)
     (cond
       ((null? env) (myerror "Received null environment when adding class binding"))
-      ((is_in_frame name (topframe env)) (myerror "class already in top frame of the environment")); allows for same name classes at different scope levels
+      ((is_in_frame? name (topframe env)) (myerror "class already in top frame of the environment")); allows for same name classes at different scope levels
       (else (cons (add_class_binding_to_frame name closure (topframe env)) (cdr env))))))
 
 (define add_class_binding_to_frame ;takes a class name and closure and the environment frame - returns the frame with the class binding added
