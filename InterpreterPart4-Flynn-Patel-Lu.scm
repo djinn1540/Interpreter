@@ -85,6 +85,7 @@
       ((eq? 'function (statement-type statement)) (interpret-function statement environment))
       ((eq? 'static-function (statement-type statement)) (interpret-function statement environment))
       ((eq? 'funcall (statement-type statement)) (interpret-funcall-state statement environment throw))
+      ((eq? 'dot (statement-type statement)) (interpret-funcall statement environment throw)) ;placeholder TODO
       (else (myerror "Unknown statement:" (statement-type statement))))))
 
 
@@ -236,6 +237,7 @@
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
       ((and (list? expr) (eq? 'funcall (operator expr))) (interpret-funcall-value expr environment throw))
+      ((and (list? expr) (eq? 'dot (operator expr))) (lookup (caddr expr) (lookup (cadr expr) environment)))
       ((not (list? expr)) (lookup expr environment))
       (else (eval-operator expr environment throw)))))
 
@@ -431,7 +433,7 @@
 ; Add a new variable/value pair to the frame.
 (define add-to-frame
   (lambda (var val frame)
-    (list (cons var (variables frame)) (cons (box(scheme->language val)) (store frame)) (functions frame) (func-info frame))))
+    (list (cons var (variables frame)) (cons (box(scheme->language val)) (store frame)) (functions frame) (func-info frame) (envframe_class_name_list frame) (envframe_class_closure_list frame))))
 
 ; Changes the binding of a variable in the environment to a new value
 (define update-existing
