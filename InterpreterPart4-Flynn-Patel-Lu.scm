@@ -14,11 +14,11 @@
  
 ; The main function.  Calls parser to get the parse tree and interprets the main with an environment that is created from global variables and functions.
 (define interpret
-  (lambda (file)
+  (lambda (file class)
     (scheme->language
      (call/cc
       (lambda (return)
-        (interpret-statement-list (body (func-lookup 'main (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown")))))
+        (interpret-statement-list (body (func-lookup 'main (create-new-instance class (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))))
                                   (push-frame (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))
                                   (lambda (v) (return v))
                                   (lambda (env) (myerror "Break used outside of loop"))
@@ -39,8 +39,27 @@
       ((eq? 'var (statement-type statement)) (interpret-declare statement environment throw))
       ((eq? '= (statement-type statement)) (interpret-assign statement environment))
       ((eq? 'function (statement-type statement)) (interpret-function statement environment))
+      ((eq? 'static-function (statement-type statement)) (interpret-function statement environment))
+      ((eq? 'class (statement-type statement)) (interpret-class statement environment))
       (else (myerror "Illegal Statement:" (statement-type statement))))))
 
+;Inserts function into current frame to be called
+;cadr the name of class
+;caddr the inheritance of the class (is null if none)
+;cadddr the body of the class
+(define interpret-class
+  (lambda (statement environment)
+    (insert-class (cadr statement) (list (caddr statement) (cadddr statement)) environment)))
+
+;need class exists in list?, for now no if statement for referennce check insert-func
+(define insert-class
+  (lambda (class info environment)
+    (cons (add-class-to-frame class (create-class-closure info) (car environment)) (cdr environment))))
+
+; Add a new variable/value pair to the frame.
+(define add-class-to-frame
+  (lambda (class info frame)
+    (list (variables frame) (store frame) (functions frame) (func-info frame) (cons class (envframe_class_name_list frame)) (cons info (envframe_class_closure_list frame)))))
 
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
 (define interpret-statement-list
@@ -64,6 +83,7 @@
       ((eq? 'throw (statement-type statement)) (interpret-throw statement environment throw))
       ((eq? 'try (statement-type statement)) (interpret-try statement environment return break continue throw))
       ((eq? 'function (statement-type statement)) (interpret-function statement environment))
+      ((eq? 'static-function (statement-type statement)) (interpret-function statement environment))
       ((eq? 'funcall (statement-type statement)) (interpret-funcall-state statement environment throw))
       (else (myerror "Unknown statement:" (statement-type statement))))))
 
@@ -211,6 +231,7 @@
 (define eval-expression
   (lambda (expr environment throw)
     (cond
+      ((and (pair? expr) (eq? 'new (car expr))) (create-new-instance (cadr expr) environment))
       ((number? expr) expr)
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
@@ -592,7 +613,7 @@
     (cond
       ((null? env) (myerror "class is not in current environment"))
       ((is_in_frame? name (topframe env)) (lookup_class_in_frame name (topframe env)))
-      (else (lookup_class_closure (popframe env) name)))))
+      (else (lookup_class_closure (pop-frame env) name)))))
 
 ;returns #t if the class name is in the frame
 (define is_in_frame?
@@ -613,7 +634,9 @@
 (define lookup_class_in_frame
   (lambda (class frame)
     (cond
-      (lookup_closure name () ()))))
+      ((not (func-exists-in-list? class (envframe_class_name_list frame))) (myerror "error: undefined class" class))
+      (else (get-info (indexof-func class (envframe_class_name_list frame)) (caddr (cdddr frame)))))))
+;car cdddddr from func-info but with two more d
 
 ;returns the closure in closlist associated with name
 (define lookup_closure
@@ -644,9 +667,13 @@
 ;--------------------------
 
 ;class closure format: ('parent_class (instance field names) (class method names) (class method closures))
+;10:34PM suggestion ((parent_class) (instance field names) (instance value) (class methods names) (class method closures) (classes) (class closures))
+;instance fields and methods are taken care of by any usage of our part 3 func
 
 ;makes a class closure
-
+(define create-class-closure
+  (lambda (info)
+    (cons (car info) (interpret-statement-list-raw (cadr info) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))))
 
 
 ;getter functions
@@ -686,8 +713,11 @@
 
 ;the instance closure looks like: ('runtime_type (instance values))
 
-;make an instance closure
 
+;make an instance closure
+(define create-new-instance
+  (lambda (class environment)
+    (cons (cadr (lookup_class_closure environment class)) environment)))
 
 
 ;getter functions
