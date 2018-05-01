@@ -103,7 +103,9 @@
 ; Updates the environment to add an new binding for a variable
 (define interpret-assign
   (lambda (statement environment throw)
-    (update (get-assign-lhs statement) (eval-expression (get-assign-rhs statement) environment throw) environment)))
+    (cond
+      ((list? (cadr statement)) (update (caddr (cadr statement)) (eval-expression (get-assign-rhs statement) environment throw) (lookup (cadadr statement) environment)))
+      (else (update (get-assign-lhs statement) (eval-expression (get-assign-rhs statement) environment throw) environment)))))
 
 ; We need to check if there is an else condition.  Otherwise, we evaluate the expression and do the right thing.
 
@@ -671,14 +673,15 @@
 ;--------------------------
 
 ;class closure format: ('parent_class (instance field names) (class method names) (class method closures))
-;10:34PM suggestion ((parent_class) (instance field names) (instance value) (class methods names) (class method closures) (classes) (class closures))
+;10:34PM suggestion ((parent_class) ((instance field names) (instance value) (class methods names) (class method closures) (classes) (class closures)))
 ;instance fields and methods are taken care of by any usage of our part 3 func
 
 ;makes a class closure
 (define create-class-closure
   (lambda (info)
-    (cons (car info) (interpret-statement-list-raw (cadr info) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))))
+    info))
 
+;    (cons (car info) (interpret-statement-list-raw (cadr info) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))))
 
 ;getter functions
 ;----------------
@@ -721,7 +724,8 @@
 ;make an instance closure
 (define create-new-instance
   (lambda (class environment)
-    (cons (cadr (lookup_class_closure environment class)) environment)))
+    (append (interpret-statement-list-raw (cadr (lookup_class_closure environment class)) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))) environment)))
+;    (cons (cadr (lookup_class_closure environment class)) environment)))
 
 
 ;getter functions
