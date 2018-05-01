@@ -56,24 +56,6 @@
       ((eq? 'static-function (statement-type statement)) (interpret-function statement environment))
       (else (myerror "Illegal Statement:" (statement-type statement))))))
 
-;Inserts function into current frame to be called
-;cadr the name of class
-;caddr the inheritance of the class (is null if none)
-;cadddr the body of the class
-(define interpret-class
-  (lambda (statement environment)
-    (insert-class (cadr statement) (list (caddr statement) (cadddr statement)) environment)))
-
-;need class exists in list?, for now no if statement for referennce check insert-func
-(define insert-class
-  (lambda (class info environment)
-    (cons (add-class-to-frame class (create-class-closure info) (car environment)) (cdr environment))))
-
-; Add a new class/closure pair to the frame.
-(define add-class-to-frame
-  (lambda (class info frame)
-    (list (variables frame) (store frame) (functions frame) (func-info frame) (cons class (envframe_class_name_list frame)) (cons info (envframe_class_closure_list frame)))))
-
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
 (define interpret-statement-list
   (lambda (statement-list environment return break continue throw)
@@ -117,7 +99,7 @@
 (define interpret-assign
   (lambda (statement environment throw)
     (cond
-      ((list? (cadr statement)) (update (caddr (cadr statement)) (eval-expression (get-assign-rhs statement) environment throw) (lookup (cadadr statement) environment)))
+      ((list? (operand1 statement)) (update (operand2 (operand1 statement)) (eval-expression (get-assign-rhs statement) environment throw) (lookup (operand1 (operand1 statement)) environment)))
       (else (update (get-assign-lhs statement) (eval-expression (get-assign-rhs statement) environment throw) environment)))))
 
 ; We need to check if there is an else condition.  Otherwise, we evaluate the expression and do the right thing.
@@ -242,16 +224,21 @@
             environment
             environment)))))
 
+;Inserts class into global frame to be accessed
+(define interpret-class
+  (lambda (statement environment)
+    (insert-class (class-name statement) (list (class-inheritance statement) (class-body statement)) environment)))
+
 ; Evaluates all possible boolean and arithmetic expressions, including constants and variables. 
 (define eval-expression
   (lambda (expr environment throw)
     (cond
-      ((and (pair? expr) (eq? 'new (car expr))) (create-new-instance (cadr expr) environment))
+      ((and (pair? expr) (eq? 'new (operator expr))) (create-new-instance (operand1 expr) environment))
       ((number? expr) expr)
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
       ((and (list? expr) (eq? 'funcall (operator expr))) (interpret-funcall-value expr environment throw))
-      ((and (list? expr) (eq? 'dot (operator expr))) (lookup (caddr expr) (lookup (cadr expr) environment)))
+      ((and (list? expr) (eq? 'dot (operator expr))) (lookup (operand2 expr) (lookup (operand1 expr) environment)))
       ((not (list? expr)) (lookup expr environment))
       (else (eval-operator expr environment throw)))))
 
@@ -331,6 +318,12 @@
 (define func-arg-list caddr)
 (define func-body cadddr)
 (define func-actual-param cddr)
+
+
+; these helper functions define class related statements
+(define class-name cadr)
+(define class-inheritance caddr)
+(define class-body cadddr)
 
 (define catch-var
   (lambda (catch-statement)
@@ -505,17 +498,18 @@
 (define add-binding
   (lambda (formal actual environment functionenvironment throw)
     (cond
-      ((and (null? formal) (null? actual)) (insert 'this (cdr functionenvironment) functionenvironment))
+      ((and (null? formal) (null? actual)) (insert 'this (instanceof functionenvironment) functionenvironment))
       ((null? formal) myerror "Too many parameters for function")
       ((null? actual) myerror "Not enough parameters for function")
       (else (add-binding (cdr formal) (cdr actual) environment (insert (car formal) (eval-expression (car actual) environment throw) functionenvironment) throw)))))
 
+(define instanceof cdr)
 ; returns the environment specific to the given function
 
 (define get-func-environment
   (lambda (func environment)
     (cond
-      ((and (list? func) (eq? 'dot (car func))) (get-func-environment (caddr func) (lookup (cadr func) environment)))
+      ((and (list? func) (eq? 'dot (operator func))) (get-func-environment (operand2 func) (lookup (operand1 func) environment)))
       ((func-exists-in-list? func (functions (topframe environment))) environment)
       (else (get-func-environment func (cdr environment))))))
 
@@ -540,7 +534,7 @@
 (define func-lookup
   (lambda (func environment)
     (cond
-      ((and (list? func) (eq? 'dot (car func))) (lookup-function (caddr func) (lookup (cadr func) environment)))
+      ((and (list? func) (eq? 'dot (operator func))) (lookup-function (operand2 func) (lookup (operand1 func) environment)))
       (else (lookup-function func environment)))))
   
 ; A helper function that does the lookup.  Returns an error if the function does not have info associated with it
@@ -655,7 +649,6 @@
     (cond
       ((not (func-exists-in-list? class (envframe_class_name_list frame))) (myerror "error: undefined class" class))
       (else (get-info (indexof-func class (envframe_class_name_list frame)) (caddr (cdddr frame)))))))
-;car cdddddr from func-info but with two more d
 
 ;returns the closure in closlist associated with name
 (define lookup_closure
@@ -667,84 +660,49 @@
       ((eq? name (car namelist)) (car closlist))
       (else (lookup_closure name (cdr namelist) (cdr closlist))))))
 
-;add a class name/closure binding to the environment
-(define add_class_binding
-  (lambda (name closure env)
-    (cond
-      ((null? env) (myerror "Received null environment when adding class binding"))
-      ((is_in_frame? name (topframe env)) (myerror "class already in top frame of the environment")); allows for same name classes at different scope levels
-      (else (cons (add_class_binding_to_frame name closure (topframe env)) (cdr env))))))
+;Inserts class helper
+(define insert-class
+  (lambda (class info environment)
+    (cons (add-class-to-frame class (create-class-closure info) (car environment)) (cdr environment))))
 
-(define add_class_binding_to_frame ;takes a class name and closure and the environment frame - returns the frame with the class binding added
-  (lambda (name closure frame)
-    ((null? frame) (myerror "Recieved null frame when adding class binding"))
-    (else (list ((variables frame) (store frame) (functions frame) (func-info frame) (cons name (envframe_class_name_list frame)() (cons closure (envframe_class_closure_list frame))))))))
-
+; Add a new class/closure pair to the frame.
+(define add-class-to-frame
+  (lambda (class info frame)
+    (list (variables frame) (store frame) (functions frame) (func-info frame) (cons class (envframe_class_name_list frame)) (cons info (envframe_class_closure_list frame)))))
 
 ;------------- MARK--------
 ;   Class Closure Methods
 ;--------------------------
 
-;class closure format: ('parent_class (instance field names) (class method names) (class method closures))
-;10:34PM suggestion ((parent_class) ((instance field names) (instance value) (class methods names) (class method closures) (classes) (class closures)))
-;instance fields and methods are taken care of by any usage of our part 3 func
+;class closure format: ((parent_class) (class body))
 
 ;makes a class closure
 (define create-class-closure
   (lambda (info)
     info))
 
-;    (cons (car info) (interpret-statement-list-raw (cadr info) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))))
-
 ;getter functions
 ;----------------
 
 (define class_closure_parent_class car)
 (define class_closure_instance_field_list cadr)
-(define class_closure_method_names_list caddr)
-(define class_closure_method_closures_list cadddr)
-
-(define class_closure_add_fields ;takes a list of arguments and a class name - returns the list of argument appended with the instance_field_list of the super classes
-  (lambda (arglist class)
-    (cond
-      ((null? class) '())
-      (else (class_closure_add_fields (append list (class_closure_instance_field_list (lookup_class_closure class)) (class_closure_parent_class (lookup_class_closure class))))))))
-
-(define class_closure_get_index ;takes a class closure and a field name and returns the index of the field (distance from end of list)
-  (lambda (clos field)
-    (get_index (class_closure_instance_field_list clos) field)))
-
-(define get_index ;takes an instance field list and a field name and returns the index of the field (distance from end of list)
-  (lambda (lis name)
-    (cond
-      ((null? lis) myerror"error: field not in field list")
-      ((eq? (car lis) name) (count_to_end (cdr lis) 0))
-      (else (get_index (cdr lis) name)))))
-
-(define count_to_end ;takes a list and continueation and returns the list's length
-  (lambda (lis continue)
-    (cond
-      ((null? lis) continue)
-      (else (count_to_end (cdr lis) (+ 1 continue))))))
 
 ;------------- MARK--------
 ; Instance Closure Methods
 ;--------------------------
 
-;the instance closure looks like: ('runtime_type (instance values))
-
+;the instance closure looks like: (instance state)
 
 ;make an instance closure
 (define create-new-instance
   (lambda (class environment)
-    (append (interpret-statement-list-raw (cadr (lookup_class_closure environment class)) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))) environment)))
-;    (cons (cadr (lookup_class_closure environment class)) environment)))
+    (interpret-statement-list-raw (instance_body_list (lookup_class_closure environment class)) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown")))))
 
 
 ;getter functions
 ;------------------
 (define instance_closure_runtime_type car)
-(define instance_closure_instance_values_list cadr)
+(define instance_body_list cadr)
 
 
 ;------------------------
