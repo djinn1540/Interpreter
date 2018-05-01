@@ -721,8 +721,3 @@
                             str
                             (makestr (string-append str (string-append " " (symbol->string (car vals)))) (cdr vals))))))
       (error-break (display (string-append str (makestr "" vals)))))))
-
-;check prints the parse tree to the console - for programmer informational purposes 
-(define check
-  (lambda (filename)
-    (parser filename)))
