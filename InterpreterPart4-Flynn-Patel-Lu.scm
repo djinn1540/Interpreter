@@ -18,12 +18,26 @@
     (scheme->language
      (call/cc
       (lambda (return)
-        (interpret-statement-list (body (func-lookup 'main (create-new-instance class (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))))
-                                  (push-frame (interpret-statement-list-raw (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))
+        (interpret-statement-list (body (func-lookup 'main (create-new-instance class (interpret-statement-list-class (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))))
+                                  (push-frame (interpret-statement-list-class (parser file) (newenvironment) (lambda (v env) (myerror "Uncaught exception thrown"))))
                                   (lambda (v) (return v))
                                   (lambda (env) (myerror "Break used outside of loop"))
                                   (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown"))))))))
+
+; interprets a list of statements for classes.  The environment from each statement is used for the next ones.
+(define interpret-statement-list-class
+  (lambda (statement-list environment throw)
+    (if (null? statement-list)
+        environment
+        (interpret-statement-list-class (cdr statement-list) (interpret-statement-class (car statement-list) environment throw) throw))))
+
+; interpret a statement in the environment with continuations for return, break, continue, throw
+(define interpret-statement-class
+  (lambda (statement environment throw)
+    (cond
+      ((eq? 'class (statement-type statement)) (interpret-class statement environment))
+      (else (myerror "Illegal Statement:" (statement-type statement))))))
 
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
 (define interpret-statement-list-raw
@@ -40,7 +54,6 @@
       ((eq? '= (statement-type statement)) (interpret-assign statement environment))
       ((eq? 'function (statement-type statement)) (interpret-function statement environment))
       ((eq? 'static-function (statement-type statement)) (interpret-function statement environment))
-      ((eq? 'class (statement-type statement)) (interpret-class statement environment))
       (else (myerror "Illegal Statement:" (statement-type statement))))))
 
 ;Inserts function into current frame to be called
@@ -56,7 +69,7 @@
   (lambda (class info environment)
     (cons (add-class-to-frame class (create-class-closure info) (car environment)) (cdr environment))))
 
-; Add a new variable/value pair to the frame.
+; Add a new class/closure pair to the frame.
 (define add-class-to-frame
   (lambda (class info frame)
     (list (variables frame) (store frame) (functions frame) (func-info frame) (cons class (envframe_class_name_list frame)) (cons info (envframe_class_closure_list frame)))))
